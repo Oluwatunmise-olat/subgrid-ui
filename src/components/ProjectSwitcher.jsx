@@ -1,17 +1,28 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, Plus } from "lucide-react";
 
-export default function ProjectSwitcher({ projects, activeProjectId, onSelect, onCreateNew }) {
+export default function ProjectSwitcher({
+  projects,
+  activeProjectId,
+  onSelect,
+  onCreateNew,
+}) {
   const [open, setOpen] = useState(false);
+
   const rootRef = useRef(null);
+
   const active = projects.find((project) => project.id === activeProjectId);
 
   useEffect(() => {
     if (!open) return;
+
     const handleClick = (e) => {
-      if (rootRef.current && !rootRef.current.contains(e.target)) setOpen(false);
+      if (rootRef.current && !rootRef.current.contains(e.target))
+        setOpen(false);
     };
+
     document.addEventListener("mousedown", handleClick);
+
     return () => document.removeEventListener("mousedown", handleClick);
   }, [open]);
 
@@ -20,14 +31,17 @@ export default function ProjectSwitcher({ projects, activeProjectId, onSelect, o
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] font-medium text-zinc-200 transition-colors hover:bg-zinc-900"
+        className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] font-medium text-[color:var(--text)] transition-colors hover:bg-[color:var(--surface-hover)]"
       >
         {active?.name || "Select project"}
-        <ChevronDown size={12} className={`text-zinc-500 transition-transform ${open ? "rotate-180" : ""}`} />
+        <ChevronDown
+          size={12}
+          className={`text-[color:var(--text-faint)] transition-transform ${open ? "rotate-180" : ""}`}
+        />
       </button>
 
       {open && (
-        <div className="animate-scale-in absolute left-0 top-full z-20 mt-1.5 w-52 rounded-xl border border-zinc-800 bg-zinc-950 p-1 shadow-2xl shadow-black/50">
+        <div className="animate-scale-in panel-solid absolute left-0 top-full z-20 mt-1.5 w-52 p-1">
           {projects.map((project) => (
             <button
               key={project.id}
@@ -37,14 +51,16 @@ export default function ProjectSwitcher({ projects, activeProjectId, onSelect, o
                 setOpen(false);
               }}
               className={`flex w-full items-center rounded-lg px-3 py-2 text-left text-xs transition-colors ${
-                project.id === activeProjectId ? "bg-zinc-900 text-zinc-100" : "text-zinc-400 hover:bg-zinc-900"
+                project.id === activeProjectId
+                  ? "bg-[color:var(--surface-hover)] text-[color:var(--text)]"
+                  : "text-[color:var(--text-dim)] hover:bg-[color:var(--surface-sunken)]"
               }`}
             >
               {project.name}
             </button>
           ))}
 
-          <div className="my-1 border-t border-zinc-900" />
+          <div className="my-1 border-t border-[color:var(--border)]" />
 
           <button
             type="button"
@@ -52,7 +68,7 @@ export default function ProjectSwitcher({ projects, activeProjectId, onSelect, o
               onCreateNew();
               setOpen(false);
             }}
-            className="flex w-full items-center gap-1.5 rounded-lg px-3 py-2 text-left text-xs text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-200"
+            className="flex w-full items-center gap-1.5 rounded-lg px-3 py-2 text-left text-xs text-[color:var(--text-dim)] transition-colors hover:bg-[color:var(--surface-sunken)] hover:text-[color:var(--text)]"
           >
             <Plus size={12} /> New project
           </button>

@@ -1,15 +1,23 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import mcpRegistryService from "../services/mcp-registry.service";
 import orchestratorService from "../services/orchestrator.service";
 import projectsService from "../services/projects.service";
 import securityService from "../services/security.service";
+import workflowService from "../services/workflow.service";
+import { QUERY_KEYS } from "../lib/constants";
 
 export const useProjects = () => {
   return useQuery({
-    queryKey: ["projects"],
+    queryKey: [QUERY_KEYS.projects],
     queryFn: async () => {
       const response = await projectsService.list();
+
       return response?.data?.projects || [];
     },
     staleTime: 30_000,
@@ -22,19 +30,19 @@ export const useCreateProject = () => {
   return useMutation({
     mutationFn: (payload) => projectsService.create(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects] });
     },
   });
 };
 
 export const useMcpServers = (projectId) => {
   return useQuery({
-    queryKey: ["mcp-servers", projectId],
+    queryKey: [QUERY_KEYS.mcpServers, projectId],
     queryFn: async () => {
       const response = await mcpRegistryService.list(projectId);
+
       return response?.data?.servers || [];
     },
-    enabled: Boolean(projectId),
     staleTime: 15_000,
     refetchInterval: 30_000,
     refetchIntervalInBackground: false,
@@ -47,7 +55,23 @@ export const useRegisterServer = () => {
   return useMutation({
     mutationFn: (payload) => mcpRegistryService.register(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.mcpServers] });
+    },
+  });
+};
+
+export const useUpdateServer = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ serverId, payload }) =>
+      mcpRegistryService.update(serverId, payload),
+    onSuccess: (_data, { serverId }) => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.mcpServers] });
+
+      queryClient.invalidateQueries({
+        queryKey: [QUERY_KEYS.serverTools, serverId],
+      });
     },
   });
 };
@@ -58,7 +82,7 @@ export const useRemoveServer = () => {
   return useMutation({
     mutationFn: (serverId) => mcpRegistryService.remove(serverId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.mcpServers] });
     },
   });
 };
@@ -69,7 +93,7 @@ export const useRemoveProject = () => {
   return useMutation({
     mutationFn: (projectId) => projectsService.remove(projectId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects] });
     },
   });
 };
@@ -80,21 +104,62 @@ export const useCheckServerHealth = () => {
   return useMutation({
     mutationFn: (serverId) => mcpRegistryService.checkHealth(serverId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["mcp-servers"] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.mcpServers] });
     },
   });
 };
 
 export const useServerTools = (serverId) => {
   return useQuery({
-    queryKey: ["mcp-server-tools", serverId],
+    queryKey: [QUERY_KEYS.serverTools, serverId],
     queryFn: async () => {
       const response = await orchestratorService.listTools(serverId);
-      return response?.data?.tools || [];
+
+      return response?.data || { tools: [] };
     },
     enabled: Boolean(serverId),
     staleTime: 30_000,
   });
+};
+
+export const useServerToolAccess = (serverId) => {
+  const query = useServerTools(serverId);
+
+  return {
+    ...query,
+    tools: query.data?.tools || [],
+    stale: Boolean(query.data?.stale),
+    staleSince: query.data?.stale_since ?? null,
+    staleError: query.data?.last_error ?? null,
+    toolFilter: query.data?.tool_filter ?? null,
+    approvalPolicy: query.data?.approval_policy || "prompt",
+    approvedTools: query.data?.approved_tools || [],
+  };
+};
+
+export const useAllServerTools = (servers = []) => {
+  const results = useQueries({
+    queries: servers.map((server) => ({
+      queryKey: [QUERY_KEYS.serverTools, server.id],
+      queryFn: async () => {
+        try {
+          const response = await orchestratorService.listTools(server.id);
+
+          return response?.data || { tools: [] };
+        } catch {
+          return { tools: [] };
+        }
+      },
+      enabled: Boolean(server.id),
+      staleTime: 30_000,
+    })),
+  });
+
+  return servers.map((server, i) => ({
+    server,
+    tools: results[i]?.data?.tools || [],
+    isLoading: results[i]?.isLoading,
+  }));
 };
 
 export const useCallTool = () => {
@@ -102,18 +167,23 @@ export const useCallTool = () => {
 
   return useMutation({
     mutationFn: ({ serverId, toolName, input, approved }) =>
-      orchestratorService.callTool(serverId, { tool_name: toolName, input, approved }),
+      orchestratorService.callTool(serverId, {
+        tool_name: toolName,
+        input,
+        approved,
+      }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["action-history"] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.actionHistory] });
     },
   });
 };
 
 export const useSessionStatus = () => {
   return useQuery({
-    queryKey: ["session"],
+    queryKey: [QUERY_KEYS.session],
     queryFn: async () => {
       const response = await securityService.sessionStatus();
+
       return Boolean(response?.data?.authenticated);
     },
     staleTime: 60_000,
@@ -127,16 +197,17 @@ export const useLogout = () => {
   return useMutation({
     mutationFn: () => securityService.logout(),
     onSuccess: () => {
-      queryClient.setQueryData(["session"], false);
+      queryClient.setQueryData([QUERY_KEYS.session], false);
     },
   });
 };
 
 export const usePasskeysExist = () => {
   return useQuery({
-    queryKey: ["passkeys-exist"],
+    queryKey: [QUERY_KEYS.passkeysExist],
     queryFn: async () => {
       const response = await securityService.checkPasskeysExist();
+
       return Boolean(response?.data?.exists);
     },
     staleTime: 60_000,
@@ -145,9 +216,10 @@ export const usePasskeysExist = () => {
 
 export const usePasskeys = () => {
   return useQuery({
-    queryKey: ["passkeys"],
+    queryKey: [QUERY_KEYS.passkeys],
     queryFn: async () => {
       const response = await securityService.listPasskeys();
+
       return response?.data?.passkeys || [];
     },
     staleTime: 30_000,
@@ -160,18 +232,102 @@ export const useRemovePasskey = () => {
   return useMutation({
     mutationFn: (passkeyId) => securityService.removePasskey(passkeyId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["passkeys"] });
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.passkeys] });
     },
   });
 };
 
-export const useActionHistory = (serverId) => {
+export const useWorkflow = (workflowId) => {
   return useQuery({
-    queryKey: ["action-history", serverId],
+    queryKey: [QUERY_KEYS.workflows, workflowId],
     queryFn: async () => {
-      const response = await orchestratorService.history(serverId);
+      const response = await workflowService.get(workflowId);
+
+      return response?.data?.workflow || null;
+    },
+    enabled: Boolean(workflowId),
+    staleTime: 0,
+    refetchInterval: (query) =>
+      query.state.data?.status === "running" ? 1500 : false,
+  });
+};
+
+export const useUpdateWorkflow = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ workflowId, patch }) =>
+      workflowService.update(workflowId, patch),
+    onSuccess: (_data, { workflowId }) => {
+      queryClient.invalidateQueries({
+        queryKey: [QUERY_KEYS.workflows, workflowId],
+      });
+    },
+  });
+};
+
+export const useApproveWorkflow = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (workflowId) => workflowService.approve(workflowId),
+    onSuccess: (_data, workflowId) => {
+      queryClient.invalidateQueries({
+        queryKey: [QUERY_KEYS.workflows, workflowId],
+      });
+    },
+  });
+};
+
+export const useCancelWorkflow = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (workflowId) => workflowService.cancel(workflowId),
+    onSuccess: (_data, workflowId) => {
+      queryClient.invalidateQueries({
+        queryKey: [QUERY_KEYS.workflows, workflowId],
+      });
+    },
+  });
+};
+
+export const useExecuteWorkflow = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (workflowId) => workflowService.execute(workflowId),
+    onSuccess: (_data, workflowId) => {
+      queryClient.invalidateQueries({
+        queryKey: [QUERY_KEYS.workflows, workflowId],
+      });
+    },
+  });
+};
+
+export const useRetryWorkflowStep = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ workflowId, stepId, allowAlways }) =>
+      workflowService.retryStep(workflowId, stepId, allowAlways),
+    onSuccess: (_data, { workflowId }) => {
+      queryClient.invalidateQueries({
+        queryKey: [QUERY_KEYS.workflows, workflowId],
+      });
+    },
+  });
+};
+
+export const useActionHistory = (serverId, projectId) => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.actionHistory, serverId, projectId],
+    queryFn: async () => {
+      const response = await orchestratorService.history(serverId, projectId);
+
       return response?.data?.logs || [];
     },
+    enabled: Boolean(serverId || projectId),
     staleTime: 10_000,
     refetchInterval: 20_000,
     refetchIntervalInBackground: false,

@@ -1,56 +1,357 @@
-import { useState } from "react";
-import { ArrowLeft, ArrowUpRight, ChevronRight, Fingerprint, Lock, X } from "lucide-react";
-import toast from "react-hot-toast";
+import { useEffect, useRef, useState } from "react";
 
-import { CATEGORIES, INTEGRATIONS, slugify } from "../lib/integrations";
+import {
+  ArrowLeft,
+  ArrowUpRight,
+  Eye,
+  EyeOff,
+  Fingerprint,
+  Info,
+  Lock,
+  Search,
+  ShieldCheck,
+  X,
+} from "lucide-react";
+import toast from "react-hot-toast";
+import {
+  CATEGORIES,
+  FIELD_HELP,
+  INTEGRATIONS,
+  INTEGRATION_SETUP,
+  slugify,
+} from "../lib/integrations";
+import {
+  BRIDGE_PRESETS,
+  buildCliSpec,
+  buildRestSpec,
+  buildS3Spec,
+  bridgePresetById,
+} from "../lib/bridgePresets";
+import { brandFor } from "../lib/brand";
 import { requestApproval } from "../lib/webauthn";
 import { usePasskeys } from "../hooks/useQueryHooks";
 import oauthService from "../services/oauth.service";
 
 const FIELD =
-  "w-full rounded-lg border border-zinc-800 bg-zinc-900/80 px-3 py-2 text-sm text-zinc-200 outline-none transition-colors focus:border-blue-500/50";
-const LABEL = "mb-1.5 block text-xs font-medium text-zinc-500";
+  "w-full rounded-xl border border-[color:var(--border)] bg-[color:var(--surface)] px-3 py-2.5 text-[13px] text-[color:var(--text)] outline-none transition-colors placeholder:text-[color:var(--text-faint)] focus:border-[color:var(--brand)]";
 
-function IntegrationPicker({ onPick }) {
+const LABEL = "mb-1.5 block text-xs font-medium text-[color:var(--text-dim)]";
+
+const fieldWarning = (key, value) => {
+  const v = (value || "").trim();
+
+  if (!v) return null;
+
+  if (key === "CLOUDFLARE_ZONE_ID" && !/^[a-f0-9]{32}$/i.test(v)) {
+    return "That doesn't look like a Zone ID. A Zone ID is a 32-character hex string (e.g. 023e105f4ecef8ad9ca31a8372d0c353) — it is not the domain name. Open the domain in Cloudflare and copy the Zone ID from the Overview page's right sidebar.";
+  }
+
+  return null;
+};
+
+function PickerList({ onPick, selectedId }) {
+  const [q, setQ] = useState("");
+
+  const filtered = INTEGRATIONS.filter(
+    (i) =>
+      !q.trim() ||
+      `${i.name} ${i.description} ${i.id}`
+        .toLowerCase()
+        .includes(q.trim().toLowerCase()),
+  );
+
   const grouped = Object.keys(CATEGORIES)
-    .map((category) => ({ category, items: INTEGRATIONS.filter((i) => i.category === category) }))
-    .filter((group) => group.items.length);
+    .map((category) => ({
+      category,
+      items: filtered.filter((i) => i.category === category),
+    }))
+    .filter((g) => g.items.length);
 
   return (
-    <div className="space-y-4">
-      {grouped.map(({ category, items }) => (
-        <div key={category}>
-          <h4 className="mb-1 px-1 text-[11px] font-medium uppercase tracking-wider text-zinc-600">
-            {CATEGORIES[category]}
-          </h4>
-          <div className="space-y-1">
-            {items.map((integration) => (
-              <button
-                key={integration.id}
-                type="button"
-                onClick={() => onPick(integration)}
-                className="group flex w-full items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left transition-colors hover:border-zinc-800 hover:bg-zinc-900/50"
-              >
-                <div className="min-w-0 flex-1">
-                  <div className="text-[13px] text-zinc-200">{integration.name}</div>
-                  <div className="mt-0.5 truncate text-[11px] text-zinc-500">{integration.description}</div>
-                </div>
-                <ChevronRight size={14} className="shrink-0 text-zinc-700 transition-colors group-hover:text-zinc-400" />
-              </button>
-            ))}
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="well mb-3 flex shrink-0 items-center gap-2 rounded-xl px-3 py-2">
+        <Search size={13} className="shrink-0 text-[color:var(--text-faint)]" />
+        <input
+          autoFocus
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Search Cloudinary, Resend, DNS..."
+          className="w-full bg-transparent text-[13px] text-[color:var(--text)] placeholder:text-[color:var(--text-faint)] focus:outline-none"
+        />
+      </div>
+      <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+        {grouped.map(({ category, items }) => (
+          <div key={category}>
+            <h4 className="eyebrow mb-1.5 px-1">{CATEGORIES[category]}</h4>
+            <div className="space-y-1">
+              {items.map((integration) => {
+                const { Icon } = brandFor(integration.id);
+
+                const active = selectedId === integration.id;
+
+                return (
+                  <button
+                    key={integration.id}
+                    type="button"
+                    onClick={() => onPick(integration)}
+                    className={`connector-option group flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-all ${
+                      active
+                        ? "connector-option-active"
+                        : "border-transparent hover:border-[color:var(--border)] hover:bg-[color:var(--surface-sunken)]"
+                    }`}
+                  >
+                    <div className="well flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
+                      <Icon
+                        size={15}
+                        strokeWidth={1.8}
+                        className="text-[color:var(--text-dim)]"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-[13px] font-medium text-[color:var(--text)]">
+                          {integration.name}
+                        </span>
+                        {integration.official && (
+                          <span
+                            title="Published and hosted by the vendor"
+                            className="shrink-0 rounded border border-emerald-400/30 bg-emerald-400/10 px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-emerald-300"
+                          >
+                            Official
+                          </span>
+                        )}
+                        {integration.firstParty && (
+                          <span
+                            title="Written and run by Subgrid — not a third-party package"
+                            className="shrink-0 rounded border border-[color:var(--brand-line)] bg-[color:var(--brand-soft)] px-1 py-px text-[9px] font-semibold uppercase tracking-wide text-[color:var(--brand)]"
+                          >
+                            First-party
+                          </span>
+                        )}
+                      </div>
+                      <div className="truncate text-[11px] text-[color:var(--text-dim)]">
+                        {integration.description}
+                      </div>
+                    </div>
+                    <ArrowUpRight
+                      size={13}
+                      className="shrink-0 text-[color:var(--text-faint)] transition-colors group-hover:text-[color:var(--text-dim)]"
+                    />
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        </div>
-      ))}
+        ))}
+
+        {filtered.length === 0 && (
+          <p className="py-8 text-center text-xs text-[color:var(--text-faint)]">
+            No matches for "{q}".
+          </p>
+        )}
+      </div>
     </div>
   );
 }
 
-function KnownIntegrationForm({ integration, onBack, onSubmit, isSubmitting }) {
+function HelpSheet({ integration, onClose }) {
+  const setup = INTEGRATION_SETUP[integration.id];
+
+  const { Icon } = brandFor(integration.id);
+
+  if (!setup) return null;
+
+  return (
+    <div
+      className="animate-overlay-in fixed inset-0 z-[60] flex justify-end bg-black/50 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <aside
+        className="animate-sheet-in flex h-full w-[min(440px,100vw)] flex-col border-l border-[color:var(--border-strong)] bg-[#1c1c23]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="flex items-start gap-3 border-b border-[color:var(--border)] px-5 py-4">
+          <span className="well flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
+            <Icon
+              size={16}
+              strokeWidth={1.8}
+              className="text-[color:var(--text-dim)]"
+            />
+          </span>
+          <div className="min-w-0 flex-1">
+            <h3 className="text-[14px] font-semibold text-[color:var(--text)]">
+              How to connect {integration.name}
+            </h3>
+            <p className="mt-0.5 text-[11px] text-[color:var(--text-dim)]">
+              {integration.description}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md p-1.5 text-[color:var(--text-faint)] transition-colors hover:bg-[color:var(--surface-hover)] hover:text-[color:var(--text)]"
+          >
+            <X size={15} />
+          </button>
+        </header>
+
+        <div className="flex-1 overflow-y-auto px-5 py-5">
+          <ol className="space-y-3.5">
+            {setup.steps.map((step, i) => (
+              <li key={i} className="flex gap-3">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-[color:var(--border)] font-mono text-[10px] text-[color:var(--text-dim)]">
+                  {i + 1}
+                </span>
+                <span className="text-[12.5px] leading-relaxed text-[color:var(--text)]">
+                  {step}
+                </span>
+              </li>
+            ))}
+          </ol>
+
+          {setup.docs && (
+            <a
+              href={setup.docs}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-6 inline-flex items-center gap-1.5 text-[12px] font-medium text-[color:var(--brand)] transition-colors hover:text-[color:var(--brand-strong)]"
+            >
+              Open {integration.name} <ArrowUpRight size={12} />
+            </a>
+          )}
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function SecretField({
+  field,
+  value,
+  show,
+  onToggle,
+  onChange,
+  sources,
+  reusedFrom,
+  onReuse,
+  onClearReuse,
+}) {
+  const reused = Boolean(reusedFrom);
+
+  const warning = fieldWarning(field.key, value);
+
+  return (
+    <div>
+      <label className={`${LABEL} flex items-center justify-between`}>
+        <span className="flex items-center gap-1.5">
+          <Lock size={11} className="text-[color:var(--text-faint)]" />
+          {field.label}
+          <span className="font-mono text-[10px] text-[color:var(--text-faint)]">
+            {field.key}
+          </span>
+        </span>
+        {field.type === "password" && !reused && (
+          <button
+            type="button"
+            onClick={onToggle}
+            className="flex items-center gap-1 text-[11px] text-[color:var(--text-faint)] hover:text-[color:var(--text-dim)]"
+          >
+            {show ? <EyeOff size={11} /> : <Eye size={11} />}{" "}
+            {show ? "Hide" : "Show"}
+          </button>
+        )}
+      </label>
+
+      {reused ? (
+        <div className="flex items-center gap-2 rounded-lg border border-[color:var(--brand-line)] bg-[color:var(--brand-soft)] px-3 py-2.5">
+          <Lock size={12} className="shrink-0 text-[color:var(--brand)]" />
+          <span className="min-w-0 flex-1 truncate text-[12px] text-[color:var(--text)]">
+            Reusing secret from “{reusedFrom.name}”
+          </span>
+          <button
+            type="button"
+            onClick={onClearReuse}
+            className="shrink-0 text-[11px] text-[color:var(--text-dim)] hover:text-[color:var(--text)]"
+          >
+            Enter new
+          </button>
+        </div>
+      ) : (
+        <input
+          required={field.required !== false && !sources?.length}
+          type={field.type === "password" && !show ? "password" : "text"}
+          placeholder={field.placeholder}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className={`${FIELD} font-mono text-[12px] ${warning ? "border-amber-400/50" : ""}`}
+          autoComplete="off"
+          spellCheck={false}
+        />
+      )}
+
+      {!reused && warning && (
+        <p className="mt-1.5 text-[11px] leading-relaxed text-amber-400">
+          {warning}
+        </p>
+      )}
+
+      {!reused && sources?.length > 0 && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <span className="text-[10.5px] text-[color:var(--text-faint)]">
+            Reuse from:
+          </span>
+          {sources.map((source) => (
+            <button
+              key={source.id}
+              type="button"
+              onClick={() => onReuse(source.id)}
+              className="rounded-full border border-[color:var(--border)] px-2 py-0.5 text-[10.5px] text-[color:var(--text-dim)] transition-colors hover:border-[color:var(--brand)] hover:text-[color:var(--text)]"
+            >
+              {source.name}
+            </button>
+          ))}
+        </div>
+      )}
+      {!reused && (FIELD_HELP[field.key] || field.help) && (
+        <p className="mt-1.5 text-[11px] leading-relaxed text-[color:var(--text-dim)]">
+          {FIELD_HELP[field.key] || field.help}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function KnownIntegrationForm({
+  integration,
+  onBack,
+  onSubmit,
+  isSubmitting,
+  existingServers = [],
+}) {
   const [name, setName] = useState(integration.name);
+
   const [values, setValues] = useState({});
+
+  const [showSecrets, setShowSecrets] = useState({});
+
+  const [reuse, setReuse] = useState({});
+
+  const [showHelp, setShowHelp] = useState(false);
+
+  const { Icon } = brandFor(integration.id);
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    const env = Object.fromEntries(
+      integration.fields
+        .filter((field) => !reuse[field.key])
+        .map((field) => [
+          field.key,
+          values[field.key] ||
+            (field.required === false ? field.defaultValue || "" : ""),
+        ]),
+    );
 
     onSubmit({
       name,
@@ -60,53 +361,139 @@ function KnownIntegrationForm({ integration, onBack, onSubmit, isSubmitting }) {
       transport: "stdio",
       command: integration.command,
       args: integration.baseArgs,
-      env: values,
+      env,
+      ...(Object.keys(reuse).length ? { reuse_keys: reuse } : {}),
     });
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3.5">
+    <form onSubmit={handleSubmit}>
       <button
         type="button"
         onClick={onBack}
-        className="-ml-1 mb-1 flex items-center gap-1 text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+        className="mb-3 flex w-fit items-center gap-1 text-xs text-[color:var(--text-dim)] hover:text-[color:var(--text)]"
       >
-        <ArrowLeft size={12} /> Choose a different integration
+        <ArrowLeft size={12} /> All components
       </button>
 
-      <div>
-        <label className={LABEL}>Name</label>
-        <input required value={name} onChange={(e) => setName(e.target.value)} className={FIELD} />
-      </div>
-
-      {integration.fields.map((field) => (
-        <div key={field.key}>
-          <label className={`${LABEL} flex items-center gap-1.5`}>
-            {field.type === "password" && <Lock size={11} className="text-zinc-600" />}
-            {field.label}
-          </label>
-          <input
-            required
-            type={field.type}
-            placeholder={field.placeholder}
-            value={values[field.key] || ""}
-            onChange={(e) => setValues((prev) => ({ ...prev, [field.key]: e.target.value }))}
-            className={`${FIELD} font-mono`}
+      <div className="mb-4 flex items-center gap-3">
+        <div className="well flex h-11 w-11 items-center justify-center rounded-xl">
+          <Icon
+            size={18}
+            strokeWidth={1.8}
+            className="text-[color:var(--text-dim)]"
           />
         </div>
-      ))}
+        <div>
+          <h3 className="font-display text-[15px] font-semibold text-[color:var(--text)]">
+            {integration.name}
+          </h3>
+          <p className="text-[11px] text-[color:var(--text-dim)]">
+            {integration.description}
+          </p>
+        </div>
+      </div>
 
-      {integration.fields.length > 0 && (
-        <p className="text-[11px] leading-relaxed text-zinc-600">Encrypted at rest. Never returned by the API after this.</p>
+      {INTEGRATION_SETUP[integration.id] && (
+        <button
+          type="button"
+          onClick={() => setShowHelp(true)}
+          className="mb-4 flex w-full items-center gap-2.5 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-sunken)] px-3 py-2.5 text-left text-[11.5px] text-[color:var(--text-dim)] transition-colors hover:border-[color:var(--border-strong)] hover:text-[color:var(--text)]"
+        >
+          <Info size={13} className="shrink-0 text-[color:var(--brand)]" />
+          <span className="min-w-0 flex-1">
+            How to connect — step-by-step guide
+          </span>
+          <ArrowUpRight
+            size={12}
+            className="shrink-0 text-[color:var(--text-faint)]"
+          />
+        </button>
       )}
 
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="w-full rounded-lg bg-zinc-100 py-2.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {isSubmitting ? "Connecting..." : `Connect ${integration.name}`}
-      </button>
+      {integration.setupNote && (
+        <div className="mb-4 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-sunken)] px-3 py-2.5 text-[11px] leading-relaxed text-[color:var(--text-dim)]">
+          {integration.setupNote}
+        </div>
+      )}
+
+      <div className="space-y-4">
+        <div>
+          <label className={LABEL}>Display name</label>
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className={FIELD}
+          />
+          <p className="mt-1 font-mono text-[10px] text-[color:var(--text-faint)]">
+            slug: {slugify(name) || "—"}
+          </p>
+        </div>
+
+        <div className="space-y-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-sunken)]/40 p-3">
+          {integration.fields.map((field) => (
+            <SecretField
+              key={field.key}
+              field={field}
+              value={values[field.key] || ""}
+              show={showSecrets[field.key]}
+              onToggle={() =>
+                setShowSecrets((s) => ({ ...s, [field.key]: !s[field.key] }))
+              }
+              onChange={(v) =>
+                setValues((prev) => ({ ...prev, [field.key]: v }))
+              }
+              sources={existingServers.filter((s) =>
+                (s.secret_keys || []).includes(field.key),
+              )}
+              reusedFrom={
+                reuse[field.key]
+                  ? existingServers.find((s) => s.id === reuse[field.key])
+                  : null
+              }
+              onReuse={(sourceId) =>
+                setReuse((r) => ({ ...r, [field.key]: sourceId }))
+              }
+              onClearReuse={() =>
+                setReuse((r) => {
+                  const next = { ...r };
+
+                  delete next[field.key];
+
+                  return next;
+                })
+              }
+            />
+          ))}
+        </div>
+
+        <div className="flex items-start gap-2 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-sunken)]/60 px-3 py-2.5">
+          <ShieldCheck size={13} className="mt-0.5 shrink-0 text-emerald-400" />
+          <p className="text-[11px] leading-relaxed text-[color:var(--text-dim)]">
+            AES-GCM encrypted at rest. Never returned by the API. You'll tap
+            your passkey once to approve storing these — that's the only code
+            path that can decrypt them.
+          </p>
+        </div>
+      </div>
+
+      <div className="sticky bottom-0 mt-5 border-t border-[color:var(--border)] bg-[color:var(--surface)] pb-1 pt-4">
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="btn-primary w-full justify-center py-2.5"
+        >
+          {isSubmitting ? "Connecting..." : `Connect ${integration.name}`}
+        </button>
+      </div>
+
+      {showHelp && (
+        <HelpSheet
+          integration={integration}
+          onClose={() => setShowHelp(false)}
+        />
+      )}
     </form>
   );
 }
@@ -114,231 +501,665 @@ function KnownIntegrationForm({ integration, onBack, onSubmit, isSubmitting }) {
 function OAuthIntegrationForm({ integration, onBack, onSubmit, isSubmitting }) {
   const [name, setName] = useState(integration.name);
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
+  const { Icon } = brandFor(integration.id);
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit({
+          name,
+          slug: slugify(name),
+          category: integration.category,
+          provider: integration.id,
+          transport: integration.transport,
+          url: integration.url,
+        });
+      }}
+    >
+      <button
+        type="button"
+        onClick={onBack}
+        className="mb-3 flex w-fit items-center gap-1 text-xs text-[color:var(--text-dim)] hover:text-[color:var(--text)]"
+      >
+        <ArrowLeft size={12} /> All components
+      </button>
+      <div className="mb-4 flex items-center gap-3">
+        <div className="well flex h-11 w-11 items-center justify-center rounded-xl">
+          <Icon
+            size={18}
+            strokeWidth={1.8}
+            className="text-[color:var(--text-dim)]"
+          />
+        </div>
+        <div>
+          <h3 className="font-display text-[15px] font-semibold text-[color:var(--text)]">
+            {integration.name}
+          </h3>
+          <p className="text-[11px] text-[color:var(--text-dim)]">
+            {integration.description}
+          </p>
+        </div>
+      </div>
+      <div className="space-y-4">
+        <div>
+          <label className={LABEL}>Display name</label>
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className={FIELD}
+          />
+        </div>
+        <div className="connector-oauth-note rounded-xl border px-3 py-3">
+          <p className="text-[12px] leading-relaxed">
+            No secret to paste. After creating the component you'll be sent to{" "}
+            {integration.name} to sign in — Subgrid stores only the resulting
+            tokens, encrypted.
+          </p>
+        </div>
+      </div>
+      <div className="sticky bottom-0 mt-5 border-t border-[color:var(--border)] bg-[color:var(--surface)] pb-1 pt-4">
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="btn-primary w-full justify-center py-2.5"
+        >
+          {isSubmitting ? "Creating..." : `Continue to ${integration.name}`}{" "}
+          <ArrowUpRight size={14} />
+        </button>
+      </div>
+    </form>
+  );
+}
+
+const HTTP_BRIDGE_SENTINEL = "<subgrid:http-bridge>";
+
+const CLI_BRIDGE_SENTINEL = "<subgrid:cli-bridge>";
+
+const S3_BRIDGE_SENTINEL = "<subgrid:s3-bridge>";
+
+function BridgePresetForm({
+  onBack,
+  onSubmit,
+  isSubmitting,
+  existingServers = [],
+}) {
+  const [presetId, setPresetId] = useState(null);
+
+  const [name, setName] = useState("");
+
+  const [values, setValues] = useState({});
+
+  const [showSecrets, setShowSecrets] = useState({});
+
+  const [reuse, setReuse] = useState({});
+
+  const preset = bridgePresetById(presetId);
+
+  useEffect(() => {
+    if (preset) setName(preset.name);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [presetId]);
+
+  if (!preset) {
+    return (
+      <>
+        <button
+          type="button"
+          onClick={onBack}
+          className="mb-3 flex w-fit items-center gap-1 text-xs text-[color:var(--text-dim)] hover:text-[color:var(--text)]"
+        >
+          <ArrowLeft size={12} /> All components
+        </button>
+        <div className="mb-4">
+          <h3 className="font-display text-[15px] font-semibold text-[color:var(--text)]">
+            Vendor API / CLI
+          </h3>
+          <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--text-dim)]">
+            Each of these runs{" "}
+            <strong className="font-medium text-[color:var(--text)]">
+              our own bridge
+            </strong>{" "}
+            — one small server that either calls a vendor&rsquo;s documented
+            REST API (reachable only at the host configured for it) or runs the
+            vendor&rsquo;s own CLI with fixed arguments and no shell. No
+            community package, no third-party process holding your token.
+          </p>
+        </div>
+        <div className="space-y-1.5">
+          {BRIDGE_PRESETS.map((entry) => {
+            const { Icon } = brandFor(entry.provider);
+
+            return (
+              <button
+                key={entry.id}
+                type="button"
+                onClick={() => setPresetId(entry.id)}
+                className="flex w-full items-start gap-3 rounded-xl border border-[color:var(--border)] px-3 py-3 text-left transition-colors hover:border-[color:var(--border-strong)] hover:bg-[color:var(--surface-sunken)]"
+              >
+                <span className="well flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
+                  <Icon size={15} className="text-[color:var(--text-dim)]" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-1.5">
+                    <span className="truncate text-[13px] font-medium text-[color:var(--text)]">
+                      {entry.name}
+                    </span>
+                    <span className="shrink-0 rounded border border-[color:var(--border)] px-1 py-px font-mono text-[9px] uppercase tracking-wide text-[color:var(--text-faint)]">
+                      {entry.kind === "cli"
+                        ? "CLI"
+                        : entry.kind === "s3"
+                          ? "S3"
+                          : "REST"}
+                    </span>
+                  </span>
+                  <span className="mt-0.5 block text-[11px] text-[color:var(--text-dim)]">
+                    {entry.description}
+                  </span>
+                  <span className="mt-1 block truncate font-mono text-[10px] text-[color:var(--text-faint)]">
+                    {entry.verbs.length} tools ·{" "}
+                    {entry.kind === "cli"
+                      ? `${entry.command} ${(entry.prefix || []).join(" ")}`
+                      : entry.kind === "s3"
+                        ? "your S3 endpoint"
+                        : entry.baseUrl.replace(/^https?:\/\//, "")}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </>
+    );
+  }
+
+  const { Icon } = brandFor(preset.provider);
+
+  const isCli = preset.kind === "cli";
+
+  const isS3 = preset.kind === "s3";
+
+  const allFields = [
+    ...(preset.fields || []),
+    ...(preset.optionalFields || []),
+  ];
+
+  const handleSubmit = (event) => {
+    event.preventDefault();
+
+    const env = Object.fromEntries(
+      allFields
+        .filter(
+          (field) => !reuse[field.key] && (values[field.key] || "").trim(),
+        )
+        .map((field) => [field.key, values[field.key]]),
+    );
 
     onSubmit({
       name,
       slug: slugify(name),
-      category: integration.category,
-      provider: integration.id,
-      transport: integration.transport,
-      url: integration.url,
+      category: preset.category,
+      provider: preset.id,
+      transport: "stdio",
+      command: "bun",
+      args: [
+        isCli
+          ? CLI_BRIDGE_SENTINEL
+          : isS3
+            ? S3_BRIDGE_SENTINEL
+            : HTTP_BRIDGE_SENTINEL,
+        JSON.stringify(
+          isCli
+            ? buildCliSpec(preset)
+            : isS3
+              ? buildS3Spec(preset)
+              : buildRestSpec(preset),
+        ),
+      ],
+      env,
+      ...(Object.keys(reuse).length ? { reuse_keys: reuse } : {}),
     });
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-3.5">
+    <form onSubmit={handleSubmit}>
       <button
         type="button"
-        onClick={onBack}
-        className="-ml-1 mb-1 flex items-center gap-1 text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+        onClick={() => {
+          setPresetId(null);
+          setValues({});
+          setReuse({});
+        }}
+        className="mb-3 flex w-fit items-center gap-1 text-xs text-[color:var(--text-dim)] hover:text-[color:var(--text)]"
       >
-        <ArrowLeft size={12} /> Choose a different integration
+        <ArrowLeft size={12} /> Providers
       </button>
 
-      <div>
-        <label className={LABEL}>Name</label>
-        <input required value={name} onChange={(e) => setName(e.target.value)} className={FIELD} />
+      <div className="mb-4 flex items-center gap-3">
+        <div className="well flex h-11 w-11 items-center justify-center rounded-xl">
+          <Icon
+            size={18}
+            strokeWidth={1.8}
+            className="text-[color:var(--text-dim)]"
+          />
+        </div>
+        <div className="min-w-0">
+          <h3 className="font-display text-[15px] font-semibold text-[color:var(--text)]">
+            {preset.name}
+          </h3>
+          <p className="text-[11px] text-[color:var(--text-dim)]">
+            {preset.description}
+          </p>
+        </div>
       </div>
 
-      <p className="text-[11px] leading-relaxed text-zinc-600">
-        You'll be sent to {integration.name} to sign in and approve access. No API key to paste — Subgrid
-        registers itself as an OAuth client and stores only the resulting tokens, encrypted.
-      </p>
+      <div className="space-y-3">
+        <div>
+          <label className={LABEL}>Display name</label>
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className={FIELD}
+          />
+          <p className="mt-1 font-mono text-[10px] text-[color:var(--text-faint)]">
+            slug: {slugify(name) || "—"}
+          </p>
+        </div>
 
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-zinc-100 py-2.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {isSubmitting ? "Connecting..." : `Continue to ${integration.name}`}
-        {!isSubmitting && <ArrowUpRight size={14} />}
-      </button>
+        {preset.note && (
+          <div className="flex items-start gap-2 rounded-xl border border-amber-400/25 bg-amber-400/[0.07] px-3 py-2.5">
+            <Info size={13} className="mt-0.5 shrink-0 text-amber-300" />
+            <p className="text-[11px] leading-relaxed text-amber-200/90">
+              {preset.note}
+            </p>
+          </div>
+        )}
+
+        {allFields.length > 0 && (
+          <div className="space-y-3 rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-sunken)]/40 p-3">
+            {allFields.map((field) => (
+              <SecretField
+                key={field.key}
+                field={field}
+                value={values[field.key] || ""}
+                show={showSecrets[field.key]}
+                onToggle={() =>
+                  setShowSecrets((s) => ({ ...s, [field.key]: !s[field.key] }))
+                }
+                onChange={(v) =>
+                  setValues((prev) => ({ ...prev, [field.key]: v }))
+                }
+                sources={existingServers.filter((s) =>
+                  (s.secret_keys || []).includes(field.key),
+                )}
+                reusedFrom={
+                  reuse[field.key]
+                    ? existingServers.find((s) => s.id === reuse[field.key])
+                    : null
+                }
+                onReuse={(sourceId) =>
+                  setReuse((r) => ({ ...r, [field.key]: sourceId }))
+                }
+                onClearReuse={() =>
+                  setReuse((r) => {
+                    const next = { ...r };
+
+                    delete next[field.key];
+
+                    return next;
+                  })
+                }
+              />
+            ))}
+          </div>
+        )}
+
+        <div className="rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-sunken)]/60 px-3 py-2.5">
+          <p className="text-[11px] leading-relaxed text-[color:var(--text-dim)]">
+            <span className="font-medium text-[color:var(--text)]">
+              Boundary:
+            </span>{" "}
+            {isCli ? (
+              <>
+                this component runs{" "}
+                <span className="font-mono text-[10.5px]">
+                  {preset.command} {(preset.prefix || []).join(" ")}
+                </span>{" "}
+                with fixed arguments and{" "}
+                <span className="font-medium text-[color:var(--text)]">
+                  no shell
+                </span>{" "}
+                — a tool value can never become a second command, a pipe, or a
+                flag.
+              </>
+            ) : isS3 ? (
+              <>
+                this component talks only to the endpoint you configure, with
+                every request signed using this component&rsquo;s own keys. No
+                CLI, no global login, nothing read from your machine.
+              </>
+            ) : (
+              <>
+                this component can only ever call{" "}
+                <span className="font-mono text-[10.5px]">
+                  {preset.baseUrl}
+                </span>
+                .
+              </>
+            )}{" "}
+            It exposes {preset.verbs.length} tools —{" "}
+            <span className="font-mono text-[10.5px]">
+              {preset.verbs.map((verb) => verb.name).join(", ")}
+            </span>
+            . Anything else is refused before anything runs.
+          </p>
+          {preset.limits && (
+            <p className="mt-1.5 text-[10.5px] leading-relaxed text-[color:var(--text-faint)]">
+              {preset.limits}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="sticky bottom-0 mt-5 border-t border-[color:var(--border)] bg-[color:var(--surface)] pb-1 pt-4">
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="btn-primary w-full justify-center py-2.5"
+        >
+          {isSubmitting ? "Connecting..." : `Connect ${preset.name}`}
+        </button>
+      </div>
     </form>
   );
 }
 
 function CustomForm({ integration, onBack, onSubmit, isSubmitting }) {
   const isStdio = integration.custom === "stdio";
+
   const [name, setName] = useState("");
+
   const [command, setCommand] = useState("");
+
   const [args, setArgs] = useState("");
+
   const [url, setUrl] = useState("");
+
   const [env, setEnv] = useState("");
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-
-    const parsedEnv = env
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .reduce((acc, line) => {
-        const idx = line.indexOf("=");
-        if (idx === -1) return acc;
-        acc[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-        return acc;
-      }, {});
-
-    onSubmit({
-      name,
-      slug: slugify(name),
-      category: "other",
-      transport: isStdio ? "stdio" : "sse",
-      ...(isStdio ? { command, args: args ? args.split(" ").filter(Boolean) : [] } : { url }),
-      ...(Object.keys(parsedEnv).length ? { env: parsedEnv } : {}),
-    });
-  };
-
   return (
-    <form onSubmit={handleSubmit} className="space-y-3.5">
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        const parsedEnv = env
+          .split("\n")
+          .map((l) => l.trim())
+          .filter(Boolean)
+          .reduce((acc, line) => {
+            const idx = line.indexOf("=");
+            if (idx !== -1)
+              acc[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+            return acc;
+          }, {});
+        onSubmit({
+          name,
+          slug: slugify(name),
+          category: "other",
+          transport: isStdio ? "stdio" : "sse",
+          ...(isStdio
+            ? { command, args: args ? args.split(" ").filter(Boolean) : [] }
+            : { url }),
+          ...(Object.keys(parsedEnv).length ? { env: parsedEnv } : {}),
+        });
+      }}
+    >
       <button
         type="button"
         onClick={onBack}
-        className="-ml-1 mb-1 flex items-center gap-1 text-xs text-zinc-500 transition-colors hover:text-zinc-300"
+        className="mb-3 flex w-fit items-center gap-1 text-xs text-[color:var(--text-dim)] hover:text-[color:var(--text)]"
       >
-        <ArrowLeft size={12} /> Choose a different integration
+        <ArrowLeft size={12} /> All components
       </button>
-
-      <div>
-        <label className={LABEL}>Name</label>
-        <input required value={name} onChange={(e) => setName(e.target.value)} placeholder="My MCP server" className={FIELD} />
-      </div>
-
-      {isStdio ? (
-        <>
+      <div className="space-y-3">
+        <div>
+          <label className={LABEL}>Display name</label>
+          <input
+            required
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="My MCP server"
+            className={FIELD}
+          />
+        </div>
+        {isStdio ? (
+          <>
+            <div>
+              <label className={LABEL}>Command</label>
+              <input
+                required
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                placeholder="npx"
+                className={`${FIELD} font-mono`}
+              />
+            </div>
+            <div>
+              <label className={LABEL}>Args (space separated)</label>
+              <input
+                value={args}
+                onChange={(e) => setArgs(e.target.value)}
+                placeholder="-y some-mcp-server"
+                className={`${FIELD} font-mono`}
+              />
+            </div>
+          </>
+        ) : (
           <div>
-            <label className={LABEL}>Command</label>
-            <input required value={command} onChange={(e) => setCommand(e.target.value)} placeholder="npx" className={`${FIELD} font-mono`} />
-          </div>
-          <div>
-            <label className={LABEL}>Args (space separated)</label>
+            <label className={LABEL}>URL</label>
             <input
-              value={args}
-              onChange={(e) => setArgs(e.target.value)}
-              placeholder="-y some-mcp-server"
+              required
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://..."
               className={`${FIELD} font-mono`}
             />
           </div>
-        </>
-      ) : (
+        )}
         <div>
-          <label className={LABEL}>URL</label>
-          <input required value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://..." className={`${FIELD} font-mono`} />
+          <label className={LABEL}>Secrets — one KEY=value per line</label>
+          <textarea
+            value={env}
+            onChange={(e) => setEnv(e.target.value)}
+            rows={3}
+            placeholder="API_TOKEN=..."
+            className={`${FIELD} font-mono text-xs`}
+          />
         </div>
-      )}
-
-      <div>
-        <label className={`${LABEL} flex items-center gap-1.5`}>
-          <Lock size={11} className="text-zinc-600" />
-          Secrets <span className="font-normal text-zinc-700">— one KEY=value per line, encrypted at rest</span>
-        </label>
-        <textarea
-          value={env}
-          onChange={(e) => setEnv(e.target.value)}
-          rows={3}
-          placeholder={"API_TOKEN=..."}
-          className={`${FIELD} font-mono text-xs placeholder:text-zinc-700`}
-        />
       </div>
-
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="w-full rounded-lg bg-zinc-100 py-2.5 text-sm font-medium text-zinc-900 transition-colors hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {isSubmitting ? "Registering..." : "Register server"}
-      </button>
+      <div className="sticky bottom-0 mt-5 border-t border-[color:var(--border)] bg-[color:var(--surface)] pb-1 pt-4">
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className="btn-primary w-full justify-center py-2.5"
+        >
+          {isSubmitting ? "Registering..." : "Register server"}
+        </button>
+      </div>
     </form>
   );
 }
 
-export default function AddServerDialog({ projectId, onClose, onSubmit, isSubmitting }) {
-  const [integration, setIntegration] = useState(null);
+export default function AddServerDialog({
+  projectId,
+  initialIntegrationId,
+  existingServers = [],
+  onClose,
+  onSubmit,
+  isSubmitting,
+}) {
+  const [integration, setIntegration] = useState(
+    () =>
+      INTEGRATIONS.find((i) => i.id === initialIntegrationId) ||
+      INTEGRATIONS[0] ||
+      null,
+  );
+
   const [isApproving, setIsApproving] = useState(false);
+
+  const submittingRef = useRef(false);
+
   const { data: passkeys = [] } = usePasskeys();
 
+  useEffect(() => {
+    setIntegration(
+      INTEGRATIONS.find((item) => item.id === initialIntegrationId) ||
+        INTEGRATIONS[0] ||
+        null,
+    );
+  }, [initialIntegrationId]);
+
   const handleFormSubmit = async (payload) => {
-    const hasSecrets = payload.env && Object.keys(payload.env).length > 0;
+    if (submittingRef.current) return;
 
-    if (hasSecrets && passkeys.length > 0) {
-      try {
-        setIsApproving(true);
-        const token = await requestApproval("store_server_secrets");
-        payload.approval_token = token;
-      } catch {
-        toast.error("Passkey approval was cancelled or failed");
-        setIsApproving(false);
-        return;
-      }
-      setIsApproving(false);
-    }
+    submittingRef.current = true;
 
-    const created = await onSubmit({ ...payload, project_id: projectId });
+    try {
+      const hasSecrets = payload.env && Object.keys(payload.env).length > 0;
 
-    if (integration?.oauth && created?.id) {
-      try {
-        const res = await oauthService.authorize(created.id);
-        const url = res?.data?.data?.authorize_url;
-        if (url) {
-          window.location.href = url;
+      if (hasSecrets && passkeys.length > 0) {
+        try {
+          setIsApproving(true);
+
+          payload.approval_token = await requestApproval(
+            "store_server_secrets",
+          );
+        } catch {
+          toast.error("Passkey approval was cancelled or failed");
+
+          setIsApproving(false);
+
           return;
         }
-      } catch (err) {
-        toast.error(err.message || "Could not start the OAuth flow");
+
+        setIsApproving(false);
       }
+
+      const created = await onSubmit({ ...payload, project_id: projectId });
+
+      if (integration?.oauth && created?.id) {
+        try {
+          const res = await oauthService.authorize(created.id);
+
+          const url = res?.data?.authorize_url;
+
+          if (url) {
+            window.location.href = url;
+
+            return;
+          }
+        } catch (err) {
+          toast.error(err.message || "Could not start the OAuth flow");
+        }
+      }
+    } finally {
+      submittingRef.current = false;
     }
   };
 
   const busy = isSubmitting || isApproving;
 
   return (
-    <div className="animate-overlay-in fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-      <div className="animate-scale-in panel-solid w-full max-w-md p-5">
-        <div className="mb-5 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-zinc-100">
-            {integration ? `Connect ${integration.name}` : "Connect a component"}
-          </h3>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-1 text-zinc-500 transition-colors hover:bg-zinc-900 hover:text-zinc-200"
-          >
-            <X size={16} />
-          </button>
+    <div
+      className="animate-overlay-in fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="connector-dialog animate-scale-in panel-solid flex h-[min(640px,calc(100vh-48px))] max-h-[calc(100vh-48px)] w-full max-w-3xl overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="connector-sidebar flex h-full min-h-0 w-[300px] shrink-0 flex-col border-r border-[color:var(--border)] bg-[color:var(--surface-sunken)]/60 p-4">
+          <div className="mb-2 flex shrink-0 items-center justify-between px-1">
+            <h3 className="font-display text-[13px] font-semibold text-[color:var(--text)]">
+              Connect a component
+            </h3>
+          </div>
+          <div className="min-h-0 flex-1">
+            <PickerList onPick={setIntegration} selectedId={integration?.id} />
+          </div>
         </div>
 
-        {!integration && <IntegrationPicker onPick={setIntegration} />}
-
-        {integration && integration.oauth && (
-          <OAuthIntegrationForm
-            integration={integration}
-            onBack={() => setIntegration(null)}
-            onSubmit={handleFormSubmit}
-            isSubmitting={busy}
-          />
-        )}
-
-        {integration && !integration.custom && !integration.oauth && (
-          <KnownIntegrationForm
-            integration={integration}
-            onBack={() => setIntegration(null)}
-            onSubmit={handleFormSubmit}
-            isSubmitting={busy}
-          />
-        )}
-
-        {integration?.custom && (
-          <CustomForm integration={integration} onBack={() => setIntegration(null)} onSubmit={handleFormSubmit} isSubmitting={busy} />
-        )}
-
-        {isApproving && (
-          <div className="mt-3 flex items-center gap-2 rounded-lg border border-blue-900/40 bg-blue-950/20 px-3 py-2.5 text-xs text-blue-300">
-            <Fingerprint size={14} className="shrink-0 animate-pulse" />
-            Waiting for your passkey...
+        <div className="flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-5">
+          <div className="mb-2 flex justify-end">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg p-1.5 text-[color:var(--text-faint)] hover:bg-[color:var(--surface-hover)] hover:text-[color:var(--text-dim)]"
+            >
+              <X size={16} />
+            </button>
           </div>
-        )}
+          <div className="min-h-0 min-w-0 h-0 flex-1 overflow-y-auto">
+            {!integration && (
+              <div className="flex min-h-full flex-col items-center justify-center gap-2 px-6 py-8 text-center">
+                <Fingerprint
+                  size={20}
+                  className="text-[color:var(--text-faint)]"
+                />
+                <p className="text-[13px] text-[color:var(--text-dim)]">
+                  Select a component on the left
+                </p>
+                <p className="max-w-[260px] text-[11px] leading-relaxed text-[color:var(--text-faint)]">
+                  Secrets are encrypted and passkey-approved.
+                </p>
+              </div>
+            )}
+            {integration?.oauth && (
+              <OAuthIntegrationForm
+                key={integration.id}
+                integration={integration}
+                onBack={() => setIntegration(INTEGRATIONS[0] || null)}
+                onSubmit={handleFormSubmit}
+                isSubmitting={busy}
+              />
+            )}
+            {integration && !integration.custom && !integration.oauth && (
+              <KnownIntegrationForm
+                key={integration.id}
+                integration={integration}
+                existingServers={existingServers}
+                onBack={() => setIntegration(INTEGRATIONS[0] || null)}
+                onSubmit={handleFormSubmit}
+                isSubmitting={busy}
+              />
+            )}
+            {integration?.custom === "bridge" && (
+              <BridgePresetForm
+                key={integration.id}
+                onBack={() => setIntegration(INTEGRATIONS[0] || null)}
+                onSubmit={handleFormSubmit}
+                isSubmitting={busy}
+                existingServers={existingServers}
+              />
+            )}
+            {integration?.custom && integration.custom !== "bridge" && (
+              <CustomForm
+                key={integration.id}
+                integration={integration}
+                onBack={() => setIntegration(INTEGRATIONS[0] || null)}
+                onSubmit={handleFormSubmit}
+                isSubmitting={busy}
+              />
+            )}
+          </div>
+          {isApproving && (
+            <div className="mt-3 flex items-center gap-2 rounded-xl border border-[color:var(--brand)]/20 bg-[color:var(--brand-dim)] px-3 py-2.5 text-xs text-blue-700">
+              <Fingerprint size={14} className="shrink-0 animate-pulse" />
+              Waiting for your passkey — tap to approve storing these secrets...
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

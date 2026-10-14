@@ -1,54 +1,50 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-import CreateProjectScreen from "../components/CreateProjectScreen";
 import Dashboard from "./Dashboard";
+import ProjectsHome from "./ProjectsHome";
 import { useProjects } from "../hooks/useQueryHooks";
-
-const LAST_PROJECT_KEY = "subgrid.last-project-id";
+import { STORAGE_KEYS } from "../lib/constants";
+import { safeStorage } from "../lib/storage";
 
 export default function ProjectShell() {
   const { data: projects = [], isLoading } = useProjects();
-  const [activeProjectId, setActiveProjectId] = useState(null);
-  const [forceCreate, setForceCreate] = useState(false);
 
-  useEffect(() => {
-    if (activeProjectId || !projects.length) return;
-
-    let stored = null;
-    try {
-      stored = localStorage.getItem(LAST_PROJECT_KEY);
-    } catch {
-      // ignore - per-viewer convenience only
-    }
-
-    const match = projects.find((project) => project.id === stored);
-    setActiveProjectId(match ? match.id : projects[0].id);
-  }, [projects, activeProjectId]);
+  const [activeProjectId, setActiveProjectId] = useState(() =>
+    safeStorage.read(STORAGE_KEYS.lastProjectId),
+  );
 
   const selectProject = (projectId) => {
     setActiveProjectId(projectId);
-    setForceCreate(false);
-    try {
-      localStorage.setItem(LAST_PROJECT_KEY, projectId);
-    } catch {
-      // ignore
-    }
+
+    if (projectId) safeStorage.write(STORAGE_KEYS.lastProjectId, projectId);
+    else safeStorage.clear(STORAGE_KEYS.lastProjectId);
   };
 
   if (isLoading) {
-    return <div className="flex min-h-screen items-center justify-center bg-obsidian text-xs text-zinc-600">Loading...</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-obsidian text-xs text-[color:var(--text-faint)]">
+        Loading...
+      </div>
+    );
   }
 
-  if (!projects.length || forceCreate) {
-    return <CreateProjectScreen onCreated={(project) => project && selectProject(project.id)} />;
+  const active = projects.find((p) => p.id === activeProjectId);
+
+  if (!active) {
+    return (
+      <ProjectsHome
+        projects={projects}
+        onOpen={selectProject}
+        onCreated={(project) => project && selectProject(project.id)}
+      />
+    );
   }
 
   return (
     <Dashboard
       projects={projects}
-      activeProjectId={activeProjectId || projects[0].id}
-      onSelectProject={selectProject}
-      onCreateNewProject={() => setForceCreate(true)}
+      activeProjectId={active.id}
+      onBackToProjects={() => selectProject(null)}
     />
   );
 }

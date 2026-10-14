@@ -1,8 +1,8 @@
 import axios from "axios";
+
 import { getEnv } from "../utils/env";
 
-const API_BASE_URL =
-  getEnv("VITE_API_BASE_URL") || "http://localhost:8081/api/v1";
+const API_BASE_URL = getEnv("VITE_API_BASE_URL") || "http://localhost:8081/api/v1";
 
 export const API_URL = API_BASE_URL;
 
@@ -39,13 +39,14 @@ api.interceptors.response.use(
       }
 
       const errorMessage =
-        data?.message ||
-        (typeof data === "string" ? data : null) ||
-        "An error occurred";
+        data?.message || (typeof data === "string" ? data : null) || "An error occurred";
 
       const err = new Error(errorMessage);
+
       err.status = error.response.status;
+
       err.data = data;
+
       return Promise.reject(err);
     }
 
