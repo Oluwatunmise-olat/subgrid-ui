@@ -13,23 +13,10 @@ import {
   X,
 } from "lucide-react";
 import toast from "react-hot-toast";
-import {
-  CATEGORIES,
-  FIELD_HELP,
-  INTEGRATIONS,
-  INTEGRATION_SETUP,
-  slugify,
-} from "../lib/integrations";
-import {
-  BRIDGE_PRESETS,
-  buildCliSpec,
-  buildRestSpec,
-  buildS3Spec,
-  bridgePresetById,
-} from "../lib/bridgePresets";
+import { slugify } from "../lib/utils";
 import { brandFor } from "../lib/brand";
 import { requestApproval } from "../lib/webauthn";
-import { usePasskeys } from "../hooks/useQueryHooks";
+import { useCatalog, usePasskeys } from "../hooks/useQueryHooks";
 import oauthService from "../services/oauth.service";
 
 const FIELD =
@@ -50,9 +37,13 @@ const fieldWarning = (key, value) => {
 };
 
 function PickerList({ onPick, selectedId }) {
+  const { data: catalog } = useCatalog();
+
+  const integrations = catalog.integrations;
+
   const [q, setQ] = useState("");
 
-  const filtered = INTEGRATIONS.filter(
+  const filtered = integrations.filter(
     (i) =>
       !q.trim() ||
       `${i.name} ${i.description} ${i.id}`
@@ -60,7 +51,7 @@ function PickerList({ onPick, selectedId }) {
         .includes(q.trim().toLowerCase()),
   );
 
-  const grouped = Object.keys(CATEGORIES)
+  const grouped = Object.keys(catalog.categories)
     .map((category) => ({
       category,
       items: filtered.filter((i) => i.category === category),
@@ -82,7 +73,7 @@ function PickerList({ onPick, selectedId }) {
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
         {grouped.map(({ category, items }) => (
           <div key={category}>
-            <h4 className="eyebrow mb-1.5 px-1">{CATEGORIES[category]}</h4>
+            <h4 className="eyebrow mb-1.5 px-1">{catalog.categories[category]}</h4>
             <div className="space-y-1">
               {items.map((integration) => {
                 const { Icon } = brandFor(integration.id);
@@ -155,7 +146,9 @@ function PickerList({ onPick, selectedId }) {
 }
 
 function HelpSheet({ integration, onClose }) {
-  const setup = INTEGRATION_SETUP[integration.id];
+  const setup = integration.steps
+    ? { steps: integration.steps, docs: integration.docs?.url }
+    : null;
 
   const { Icon } = brandFor(integration.id);
 
@@ -312,9 +305,9 @@ function SecretField({
           ))}
         </div>
       )}
-      {!reused && (FIELD_HELP[field.key] || field.help) && (
+      {!reused && field.help && (
         <p className="mt-1.5 text-[11px] leading-relaxed text-[color:var(--text-dim)]">
-          {FIELD_HELP[field.key] || field.help}
+          {field.help}
         </p>
       )}
     </div>
@@ -356,11 +349,7 @@ function KnownIntegrationForm({
     onSubmit({
       name,
       slug: slugify(name),
-      category: integration.category,
-      provider: integration.id,
-      transport: "stdio",
-      command: integration.command,
-      args: integration.baseArgs,
+      integration_id: integration.id,
       env,
       ...(Object.keys(reuse).length ? { reuse_keys: reuse } : {}),
     });
@@ -394,7 +383,7 @@ function KnownIntegrationForm({
         </div>
       </div>
 
-      {INTEGRATION_SETUP[integration.id] && (
+      {integration.steps && (
         <button
           type="button"
           onClick={() => setShowHelp(true)}
@@ -510,10 +499,7 @@ function OAuthIntegrationForm({ integration, onBack, onSubmit, isSubmitting }) {
         onSubmit({
           name,
           slug: slugify(name),
-          category: integration.category,
-          provider: integration.id,
-          transport: integration.transport,
-          url: integration.url,
+          integration_id: integration.id,
         });
       }}
     >
@@ -573,12 +559,6 @@ function OAuthIntegrationForm({ integration, onBack, onSubmit, isSubmitting }) {
   );
 }
 
-const HTTP_BRIDGE_SENTINEL = "<subgrid:http-bridge>";
-
-const CLI_BRIDGE_SENTINEL = "<subgrid:cli-bridge>";
-
-const S3_BRIDGE_SENTINEL = "<subgrid:s3-bridge>";
-
 function BridgePresetForm({
   onBack,
   onSubmit,
@@ -595,7 +575,11 @@ function BridgePresetForm({
 
   const [reuse, setReuse] = useState({});
 
-  const preset = bridgePresetById(presetId);
+  const { data: catalog } = useCatalog();
+
+  const presets = catalog.presets;
+
+  const preset = presets.find((entry) => entry.id === presetId) || null;
 
   useEffect(() => {
     if (preset) setName(preset.name);
@@ -628,7 +612,7 @@ function BridgePresetForm({
           </p>
         </div>
         <div className="space-y-1.5">
-          {BRIDGE_PRESETS.map((entry) => {
+          {presets.map((entry) => {
             const { Icon } = brandFor(entry.provider);
 
             return (
@@ -658,12 +642,7 @@ function BridgePresetForm({
                     {entry.description}
                   </span>
                   <span className="mt-1 block truncate font-mono text-[10px] text-[color:var(--text-faint)]">
-                    {entry.verbs.length} tools ·{" "}
-                    {entry.kind === "cli"
-                      ? `${entry.command} ${(entry.prefix || []).join(" ")}`
-                      : entry.kind === "s3"
-                        ? "your S3 endpoint"
-                        : entry.baseUrl.replace(/^https?:\/\//, "")}
+                    {entry.verbNames.length} tools · {entry.authority}
                   </span>
                 </span>
               </button>
@@ -699,24 +678,7 @@ function BridgePresetForm({
     onSubmit({
       name,
       slug: slugify(name),
-      category: preset.category,
-      provider: preset.id,
-      transport: "stdio",
-      command: "bun",
-      args: [
-        isCli
-          ? CLI_BRIDGE_SENTINEL
-          : isS3
-            ? S3_BRIDGE_SENTINEL
-            : HTTP_BRIDGE_SENTINEL,
-        JSON.stringify(
-          isCli
-            ? buildCliSpec(preset)
-            : isS3
-              ? buildS3Spec(preset)
-              : buildRestSpec(preset),
-        ),
-      ],
+      preset_id: preset.id,
       env,
       ...(Object.keys(reuse).length ? { reuse_keys: reuse } : {}),
     });
@@ -825,7 +787,7 @@ function BridgePresetForm({
               <>
                 this component runs{" "}
                 <span className="font-mono text-[10.5px]">
-                  {preset.command} {(preset.prefix || []).join(" ")}
+                  {preset.authority}
                 </span>{" "}
                 with fixed arguments and{" "}
                 <span className="font-medium text-[color:var(--text)]">
@@ -844,14 +806,14 @@ function BridgePresetForm({
               <>
                 this component can only ever call{" "}
                 <span className="font-mono text-[10.5px]">
-                  {preset.baseUrl}
+                  {preset.authority}
                 </span>
                 .
               </>
             )}{" "}
-            It exposes {preset.verbs.length} tools —{" "}
+            It exposes {preset.verbNames.length} tools —{" "}
             <span className="font-mono text-[10.5px]">
-              {preset.verbs.map((verb) => verb.name).join(", ")}
+              {preset.verbNames.join(", ")}
             </span>
             . Anything else is refused before anything runs.
           </p>
@@ -999,12 +961,11 @@ export default function AddServerDialog({
   onSubmit,
   isSubmitting,
 }) {
-  const [integration, setIntegration] = useState(
-    () =>
-      INTEGRATIONS.find((i) => i.id === initialIntegrationId) ||
-      INTEGRATIONS[0] ||
-      null,
-  );
+  const { data: catalog } = useCatalog();
+
+  const integrations = catalog.integrations;
+
+  const [integration, setIntegration] = useState(null);
 
   const [isApproving, setIsApproving] = useState(false);
 
@@ -1013,12 +974,17 @@ export default function AddServerDialog({
   const { data: passkeys = [] } = usePasskeys();
 
   useEffect(() => {
-    setIntegration(
-      INTEGRATIONS.find((item) => item.id === initialIntegrationId) ||
-        INTEGRATIONS[0] ||
-        null,
-    );
-  }, [initialIntegrationId]);
+    setIntegration((current) => {
+      if (current && integrations.some((item) => item.id === current.id))
+        return current;
+
+      return (
+        integrations.find((item) => item.id === initialIntegrationId) ||
+        integrations[0] ||
+        null
+      );
+    });
+  }, [initialIntegrationId, integrations]);
 
   const handleFormSubmit = async (payload) => {
     if (submittingRef.current) return;
@@ -1119,7 +1085,7 @@ export default function AddServerDialog({
               <OAuthIntegrationForm
                 key={integration.id}
                 integration={integration}
-                onBack={() => setIntegration(INTEGRATIONS[0] || null)}
+                onBack={() => setIntegration(integrations[0] || null)}
                 onSubmit={handleFormSubmit}
                 isSubmitting={busy}
               />
@@ -1129,7 +1095,7 @@ export default function AddServerDialog({
                 key={integration.id}
                 integration={integration}
                 existingServers={existingServers}
-                onBack={() => setIntegration(INTEGRATIONS[0] || null)}
+                onBack={() => setIntegration(integrations[0] || null)}
                 onSubmit={handleFormSubmit}
                 isSubmitting={busy}
               />
@@ -1137,7 +1103,7 @@ export default function AddServerDialog({
             {integration?.custom === "bridge" && (
               <BridgePresetForm
                 key={integration.id}
-                onBack={() => setIntegration(INTEGRATIONS[0] || null)}
+                onBack={() => setIntegration(integrations[0] || null)}
                 onSubmit={handleFormSubmit}
                 isSubmitting={busy}
                 existingServers={existingServers}
@@ -1147,7 +1113,7 @@ export default function AddServerDialog({
               <CustomForm
                 key={integration.id}
                 integration={integration}
-                onBack={() => setIntegration(INTEGRATIONS[0] || null)}
+                onBack={() => setIntegration(integrations[0] || null)}
                 onSubmit={handleFormSubmit}
                 isSubmitting={busy}
               />

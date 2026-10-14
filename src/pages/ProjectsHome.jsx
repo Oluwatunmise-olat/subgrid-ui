@@ -12,7 +12,7 @@ import toast from "react-hot-toast";
 
 import AppShell from "../components/AppShell";
 import { useCreateProject, useMcpServers } from "../hooks/useQueryHooks";
-import { slugify } from "../lib/integrations";
+import { slugify } from "../lib/utils";
 
 export default function ProjectsHome({ projects, onOpen, onCreated }) {
   const [query, setQuery] = useState("");

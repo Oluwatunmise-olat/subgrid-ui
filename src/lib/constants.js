@@ -1,5 +1,6 @@
 export const QUERY_KEYS = {
   session: "session",
+  catalog: "catalog",
   projects: "projects",
   mcpServers: "mcp-servers",
   serverTools: "mcp-server-tools",

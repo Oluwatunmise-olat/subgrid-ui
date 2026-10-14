@@ -2,14 +2,9 @@ import { useState } from "react";
 import { Eye, EyeOff, Info, Lock, X } from "lucide-react";
 import toast from "react-hot-toast";
 
-import {
-  FIELD_HELP,
-  INTEGRATIONS,
-  INTEGRATION_SETUP,
-} from "../lib/integrations";
+import { useCatalog, usePasskeys } from "../hooks/useQueryHooks";
 import { brandFor } from "../lib/brand";
 import { requestApproval } from "../lib/webauthn";
-import { usePasskeys } from "../hooks/useQueryHooks";
 
 const FIELD =
   "w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-sunken)] px-3 py-2.5 text-[13px] text-[color:var(--text)] outline-none transition-colors placeholder:text-[color:var(--text-faint)] focus:border-[color:var(--brand)]";
@@ -22,7 +17,11 @@ export default function EditServerDialog({
   onSubmit,
   isSubmitting,
 }) {
-  const integration = INTEGRATIONS.find((i) => i.id === server.provider);
+  const { data: catalog } = useCatalog();
+
+  const integration = catalog.integrations.find(
+    (item) => item.id === (server.catalog_id || server.provider),
+  );
 
   const { Icon } = brandFor(server.provider);
 
@@ -197,9 +196,9 @@ export default function EditServerDialog({
                           {warning}
                         </p>
                       )}
-                      {!warning && (FIELD_HELP[field.key] || field.help) && (
+                      {!warning && field.help && (
                         <p className="mt-1.5 text-[11px] leading-relaxed text-[color:var(--text-dim)]">
-                          {FIELD_HELP[field.key] || field.help}
+                          {field.help}
                         </p>
                       )}
                     </div>
@@ -213,7 +212,7 @@ export default function EditServerDialog({
               </p>
             )}
 
-            {INTEGRATION_SETUP[server.provider] && (
+            {integration?.steps && (
               <p className="flex items-start gap-2 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-sunken)] px-3 py-2.5 text-[11px] leading-relaxed text-[color:var(--text-dim)]">
                 <Info
                   size={12}

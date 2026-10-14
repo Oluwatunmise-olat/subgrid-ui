@@ -6,11 +6,24 @@ import {
 } from "@tanstack/react-query";
 
 import mcpRegistryService from "../services/mcp-registry.service";
+import catalogService from "../services/catalog.service";
 import orchestratorService from "../services/orchestrator.service";
 import projectsService from "../services/projects.service";
 import securityService from "../services/security.service";
 import workflowService from "../services/workflow.service";
 import { QUERY_KEYS } from "../lib/constants";
+
+export const useCatalog = () => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.catalog],
+    queryFn: async () => {
+      const response = await catalogService.list();
+
+      return response?.data || { categories: {}, integrations: [], presets: [] };
+    },
+    staleTime: 5 * 60_000,
+  });
+};
 
 export const useProjects = () => {
   return useQuery({

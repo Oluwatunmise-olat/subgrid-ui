@@ -10,8 +10,11 @@ import {
   Sparkles,
 } from "lucide-react";
 
-import { useMcpServers, useProjects } from "../hooks/useQueryHooks";
-import { INTEGRATIONS } from "../lib/integrations";
+import {
+  useCatalog,
+  useMcpServers,
+  useProjects,
+} from "../hooks/useQueryHooks";
 import { brandFor } from "../lib/brand";
 
 export default function CommandPalette({ open, onClose, lastProjectId }) {
@@ -22,6 +25,10 @@ export default function CommandPalette({ open, onClose, lastProjectId }) {
   const { data: projects = [] } = useProjects();
 
   const { data: allServers = [] } = useMcpServers(undefined);
+
+  const { data: catalog } = useCatalog();
+
+  const integrations = catalog.integrations;
 
   useEffect(() => {
     if (open) setQ("");
@@ -40,14 +47,16 @@ export default function CommandPalette({ open, onClose, lastProjectId }) {
   }, [projects, doText]);
 
   const matchedIntegrations = useMemo(() => {
-    if (!doText) return INTEGRATIONS.slice(0, 4);
+    if (!doText) return integrations.slice(0, 4);
 
     const t = doText.toLowerCase();
 
-    return INTEGRATIONS.filter((i) =>
-      `${i.name} ${i.description} ${i.id}`.toLowerCase().includes(t),
-    ).slice(0, 5);
-  }, [doText]);
+    return integrations
+      .filter((i) =>
+        `${i.name} ${i.description} ${i.id}`.toLowerCase().includes(t),
+      )
+      .slice(0, 5);
+  }, [integrations, doText]);
 
   const go = (to) => {
     onClose();

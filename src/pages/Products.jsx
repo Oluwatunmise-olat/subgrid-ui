@@ -4,8 +4,7 @@ import { useNavigate } from "react-router-dom";
 
 import AppShell from "../components/AppShell";
 import CollapsibleSection from "../components/CollapsibleSection";
-import { useMcpServers, useProjects } from "../hooks/useQueryHooks";
-import { CATEGORIES, INTEGRATIONS } from "../lib/integrations";
+import { useCatalog, useMcpServers, useProjects } from "../hooks/useQueryHooks";
 import { brandFor } from "../lib/brand";
 
 const ORDER = ["storage", "email", "dns", "paas", "database", "other"];
@@ -21,6 +20,10 @@ export default function Products() {
 
   const { data: servers = [] } = useMcpServers(projectId || undefined);
 
+  const { data: catalog } = useCatalog();
+
+  const integrations = catalog.integrations;
+
   const connected = new Set(
     servers.map((server) => server.provider).filter(Boolean),
   );
@@ -28,14 +31,14 @@ export default function Products() {
   const filtered = useMemo(() => {
     const term = query.trim().toLowerCase();
 
-    return INTEGRATIONS.filter(
+    return integrations.filter(
       (item) =>
         !term ||
         `${item.name} ${item.description} ${item.id}`
           .toLowerCase()
           .includes(term),
     );
-  }, [query]);
+  }, [integrations, query]);
 
   const groups = ORDER.map((category) => ({
     category,
@@ -85,14 +88,14 @@ export default function Products() {
           <ShieldCheck size={14} className="text-emerald-400" />{" "}
           {connected.size} connected in this view{" "}
           <span className="mx-1 text-[color:var(--text-dim)]">·</span>{" "}
-          {INTEGRATIONS.length} available integrations
+          {integrations.length} available integrations
         </div>
         <div className="mt-6 space-y-3">
           {groups.map(({ category, items }) => (
             <CollapsibleSection
               key={category}
               id={`catalog-${category}`}
-              title={CATEGORIES[category]}
+              title={catalog.categories[category]}
               count={items.length}
               defaultOpen
             >

@@ -23,7 +23,6 @@ import ToolRunDialog from "../components/ToolRunDialog";
 import ExecutionLog from "../components/ExecutionLog";
 import ChatThread from "../components/ChatThread";
 import CollapsibleSection from "../components/CollapsibleSection";
-import { CATEGORIES } from "../lib/integrations";
 import { DESTRUCTIVE_TOOL_KEYWORDS } from "../lib/constants";
 import { brandFor } from "../lib/brand";
 import {
@@ -33,8 +32,9 @@ import {
   useMcpServers,
   useRegisterServer,
   useRemoveServer,
-  useUpdateServer,
   useServerToolAccess,
+  useUpdateServer,
+  useCatalog,
 } from "../hooks/useQueryHooks";
 
 const FIRST_COMPONENT = { name: "your first component" };
@@ -109,6 +109,10 @@ export default function Dashboard({
 
   const callTool = useCallTool();
 
+  const { data: catalog } = useCatalog();
+
+  const categories = catalog.categories;
+
   const project = projects.find((item) => item.id === activeProjectId);
 
   const selectedServer = servers.find((item) => item.id === selectedServerId);
@@ -124,14 +128,14 @@ export default function Dashboard({
         )
       : servers;
 
-    return Object.entries(CATEGORIES)
+    return Object.entries(categories)
       .map(([id, label]) => ({
         id,
         label,
         items: visible.filter((item) => (item.category || "other") === id),
       }))
       .filter((group) => group.items.length);
-  }, [servers, query]);
+  }, [servers, query, categories]);
 
   useEffect(() => {
     const connect = searchParams.get("connect");
