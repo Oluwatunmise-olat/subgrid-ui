@@ -1383,7 +1383,7 @@ function extractResearchSources(raw) {
 }
 
 function ResearchResult({ sources, raw }) {
-  const isR2 = /r2|bucket|binding|wrangler/i.test(raw);
+  const isR2 = /r2|bucket|binding/i.test(raw);
 
   return (
     <div>

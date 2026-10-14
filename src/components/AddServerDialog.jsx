@@ -564,8 +564,9 @@ function BridgePresetForm({
   onSubmit,
   isSubmitting,
   existingServers = [],
+  initialPresetId = null,
 }) {
-  const [presetId, setPresetId] = useState(null);
+  const [presetId, setPresetId] = useState(initialPresetId);
 
   const [name, setName] = useState("");
 
@@ -598,17 +599,16 @@ function BridgePresetForm({
         </button>
         <div className="mb-4">
           <h3 className="font-display text-[15px] font-semibold text-[color:var(--text)]">
-            Vendor API / CLI
+            Vendor API
           </h3>
           <p className="mt-1 text-[11px] leading-relaxed text-[color:var(--text-dim)]">
             Each of these runs{" "}
             <strong className="font-medium text-[color:var(--text)]">
               our own bridge
             </strong>{" "}
-            — one small server that either calls a vendor&rsquo;s documented
-            REST API (reachable only at the host configured for it) or runs the
-            vendor&rsquo;s own CLI with fixed arguments and no shell. No
-            community package, no third-party process holding your token.
+            — one small server that calls a vendor&rsquo;s documented REST API,
+            and can only ever reach the host configured for it. No community
+            package, no third-party process holding your token.
           </p>
         </div>
         <div className="space-y-1.5">
@@ -631,11 +631,7 @@ function BridgePresetForm({
                       {entry.name}
                     </span>
                     <span className="shrink-0 rounded border border-[color:var(--border)] px-1 py-px font-mono text-[9px] uppercase tracking-wide text-[color:var(--text-faint)]">
-                      {entry.kind === "cli"
-                        ? "CLI"
-                        : entry.kind === "s3"
-                          ? "S3"
-                          : "REST"}
+                      {entry.kind === "s3" ? "S3" : "REST"}
                     </span>
                   </span>
                   <span className="mt-0.5 block text-[11px] text-[color:var(--text-dim)]">
@@ -654,8 +650,6 @@ function BridgePresetForm({
   }
 
   const { Icon } = brandFor(preset.provider);
-
-  const isCli = preset.kind === "cli";
 
   const isS3 = preset.kind === "s3";
 
@@ -783,24 +777,12 @@ function BridgePresetForm({
             <span className="font-medium text-[color:var(--text)]">
               Boundary:
             </span>{" "}
-            {isCli ? (
-              <>
-                this component runs{" "}
-                <span className="font-mono text-[10.5px]">
-                  {preset.authority}
-                </span>{" "}
-                with fixed arguments and{" "}
-                <span className="font-medium text-[color:var(--text)]">
-                  no shell
-                </span>{" "}
-                — a tool value can never become a second command, a pipe, or a
-                flag.
-              </>
-            ) : isS3 ? (
+            {isS3 ? (
               <>
                 this component talks only to the endpoint you configure, with
-                every request signed using this component&rsquo;s own keys. No
-                CLI, no global login, nothing read from your machine.
+                every request signed using this component&rsquo;s own keys.
+                Nothing is read from your machine and no global login is
+                involved.
               </>
             ) : (
               <>
@@ -965,6 +947,14 @@ export default function AddServerDialog({
 
   const integrations = catalog.integrations;
 
+  // A deep link can name a bridge preset (?connect=cloudflare-dns) rather than an
+  // integration — then we open the bridge picker already on that preset.
+  const initialPresetId = catalog.presets.some(
+    (item) => item.id === initialIntegrationId,
+  )
+    ? initialIntegrationId
+    : null;
+
   const [integration, setIntegration] = useState(null);
 
   const [isApproving, setIsApproving] = useState(false);
@@ -978,13 +968,21 @@ export default function AddServerDialog({
       if (current && integrations.some((item) => item.id === current.id))
         return current;
 
+      if (initialPresetId) {
+        return (
+          integrations.find((item) => item.custom === "bridge") ||
+          integrations[0] ||
+          null
+        );
+      }
+
       return (
         integrations.find((item) => item.id === initialIntegrationId) ||
         integrations[0] ||
         null
       );
     });
-  }, [initialIntegrationId, integrations]);
+  }, [initialIntegrationId, initialPresetId, integrations]);
 
   const handleFormSubmit = async (payload) => {
     if (submittingRef.current) return;
@@ -1107,6 +1105,7 @@ export default function AddServerDialog({
                 onSubmit={handleFormSubmit}
                 isSubmitting={busy}
                 existingServers={existingServers}
+                initialPresetId={initialPresetId}
               />
             )}
             {integration?.custom && integration.custom !== "bridge" && (

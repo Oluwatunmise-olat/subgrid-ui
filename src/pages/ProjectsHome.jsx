@@ -238,6 +238,8 @@ function Metric({ label, value, icon: Icon }) {
 function NewProjectDialog({ onClose, onCreated }) {
   const [name, setName] = useState("");
 
+  const [description, setDescription] = useState("");
+
   const create = useCreateProject();
 
   const slug = slugify(name);
@@ -248,7 +250,11 @@ function NewProjectDialog({ onClose, onCreated }) {
     if (!slug) return;
 
     create.mutate(
-      { name: name.trim(), slug },
+      {
+        name: name.trim(),
+        slug,
+        ...(description.trim() ? { description: description.trim() } : {}),
+      },
       {
         onSuccess: (response) => {
           toast.success(`${name.trim()} created`);
@@ -272,8 +278,8 @@ function NewProjectDialog({ onClose, onCreated }) {
           </button>
         </div>
         <p className="mb-5 text-[12px] leading-relaxed text-[color:var(--text-dim)]">
-          Projects isolate components, secrets, and action history. Start with a
-          name and connect the stack next.
+          Projects isolate components, secrets, and action history. Describe the
+          stack and we will suggest what to connect.
         </p>
         <form onSubmit={submit} className="space-y-4">
           <div>
@@ -291,6 +297,21 @@ function NewProjectDialog({ onClose, onCreated }) {
                 slug: {slug}
               </p>
             )}
+          </div>
+          <div>
+            <label className="mb-1.5 block text-[11px] font-medium text-[color:var(--text-dim)]">
+              What does it use? (optional)
+            </label>
+            <textarea
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              rows={3}
+              placeholder="marketplace app, media uploads, mail receipts, cloudflare dns, r2 backups"
+              className="w-full resize-y rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-sunken)] px-3 py-2.5 text-[12px] leading-relaxed text-[color:var(--text)] outline-none placeholder:text-[color:var(--text-faint)] focus:border-[color:var(--brand)]"
+            />
+            <p className="mt-1.5 text-[10.5px] leading-relaxed text-[color:var(--text-faint)]">
+              Used to suggest components. Stored locally with the project.
+            </p>
           </div>
           <div className="flex gap-2">
             <button

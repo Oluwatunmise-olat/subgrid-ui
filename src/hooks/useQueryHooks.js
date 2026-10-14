@@ -13,15 +13,49 @@ import securityService from "../services/security.service";
 import workflowService from "../services/workflow.service";
 import { QUERY_KEYS } from "../lib/constants";
 
+const EMPTY_CATALOG = { categories: {}, integrations: [], presets: [] };
+
 export const useCatalog = () => {
-  return useQuery({
+  const query = useQuery({
     queryKey: [QUERY_KEYS.catalog],
     queryFn: async () => {
       const response = await catalogService.list();
 
-      return response?.data || { categories: {}, integrations: [], presets: [] };
+      return response?.data || EMPTY_CATALOG;
     },
     staleTime: 5 * 60_000,
+  });
+
+  return { ...query, data: query.data || EMPTY_CATALOG };
+};
+
+export const useSuggestions = (projectId) => {
+  return useQuery({
+    queryKey: [QUERY_KEYS.suggestions, projectId],
+    queryFn: async () => {
+      const response = await projectsService.suggest(projectId);
+
+      return (
+        response?.data || { suggestions: [], rankedBy: "none", dismissed: [] }
+      );
+    },
+    enabled: Boolean(projectId),
+    staleTime: 5 * 60_000,
+  });
+};
+
+export const useUpdateProject = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ projectId, payload }) =>
+      projectsService.update(projectId, payload),
+    onSuccess: (_data, { projectId }) => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.projects] });
+      queryClient.invalidateQueries({
+        queryKey: [QUERY_KEYS.suggestions, projectId],
+      });
+    },
   });
 };
 

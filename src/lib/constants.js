@@ -1,6 +1,7 @@
 export const QUERY_KEYS = {
   session: "session",
   catalog: "catalog",
+  suggestions: "component-suggestions",
   projects: "projects",
   mcpServers: "mcp-servers",
   serverTools: "mcp-server-tools",
@@ -20,6 +21,7 @@ export const DESTRUCTIVE_TOOL_KEYWORDS = ["delete", "remove", "drop", "destroy",
 export const API_ROUTES = {
   projects: "/projects",
   project: (id) => `/projects/${id}`,
+  projectSuggest: (id) => `/projects/${id}/suggest-components`,
   projectPlan: (id) => `/projects/${id}/plan`,
 
   mcpServers: "/mcp-servers",

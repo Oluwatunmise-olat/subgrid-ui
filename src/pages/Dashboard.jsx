@@ -6,6 +6,7 @@ import {
   ChevronRight,
   CircleAlert,
   Layers3,
+  Loader2,
   Pencil,
   Plus,
   RefreshCcw,
@@ -25,6 +26,7 @@ import ChatThread from "../components/ChatThread";
 import CollapsibleSection from "../components/CollapsibleSection";
 import { DESTRUCTIVE_TOOL_KEYWORDS } from "../lib/constants";
 import { brandFor } from "../lib/brand";
+import oauthService from "../services/oauth.service";
 import {
   useActionHistory,
   useCallTool,
@@ -33,6 +35,8 @@ import {
   useRegisterServer,
   useRemoveServer,
   useServerToolAccess,
+  useSuggestions,
+  useUpdateProject,
   useUpdateServer,
   useCatalog,
 } from "../hooks/useQueryHooks";
@@ -300,6 +304,7 @@ export default function Dashboard({
         {tab === "components" && (
           <ComponentsView
             servers={servers}
+            project={project}
             selectedServerId={selectedServerId}
             selectedServer={selectedServer}
             tools={tools}
@@ -320,7 +325,7 @@ export default function Dashboard({
             onCheck={runHealth}
             onRemove={removeServerById}
             onOpenTool={openTool}
-            onConnect={() => openConnect()}
+            onConnect={(id) => openConnect(id)}
             onEdit={(server) => setEditingServer(server)}
           />
         )}
@@ -446,6 +451,7 @@ function Overview({
 
 function ComponentsView({
   servers,
+  project,
   selectedServerId,
   selectedServer,
   tools,
@@ -500,6 +506,12 @@ function ComponentsView({
           </button>
         </div>
       </div>
+
+      <SuggestedComponents
+        projectId={project?.id}
+        description={project?.description}
+        onConnect={onConnect}
+      />
 
       {!servers.length ? (
         <EmptyState
@@ -646,6 +658,38 @@ function ComponentDetail({
 
   const [query, setQuery] = useState("");
 
+  const [signingIn, setSigningIn] = useState(false);
+
+  const { data: catalog } = useCatalog();
+
+  const integration = catalog.integrations.find(
+    (item) => item.id === (server.catalog_id || server.provider),
+  );
+
+  const needsSignIn =
+    Boolean(integration?.oauth) && server.oauth_connected === false;
+
+  const signIn = async () => {
+    setSigningIn(true);
+
+    try {
+      const response = await oauthService.authorize(server.id);
+
+      const url = response?.data?.authorize_url;
+
+      if (url) {
+        window.location.href = url;
+        return;
+      }
+
+      toast.error("Could not start the sign-in flow");
+    } catch (error) {
+      toast.error(error.message);
+    } finally {
+      setSigningIn(false);
+    }
+  };
+
   const { Icon } = brandFor(server.provider);
 
   const filtered = tools.filter(
@@ -708,7 +752,26 @@ function ComponentDetail({
         </button>
       </div>
 
-      {server.health === "unreachable" && (
+      {needsSignIn && (
+        <div className="flex flex-wrap items-center gap-3 border-b border-amber-400/20 bg-amber-400/[0.07] p-4 text-[11px] leading-relaxed text-amber-300">
+          <CircleAlert size={14} className="shrink-0" />
+          <span className="min-w-0 flex-1">
+            Not signed in yet.{" "}
+            <strong className="font-medium">{integration.name}</strong> has to
+            authorise this component before any of its tools will work.
+          </span>
+          <button
+            type="button"
+            onClick={signIn}
+            disabled={signingIn}
+            className="btn-primary shrink-0 !py-1.5"
+          >
+            {signingIn ? "Opening…" : `Sign in to ${integration.name}`}
+          </button>
+        </div>
+      )}
+
+      {server.health === "unreachable" && !needsSignIn && (
         <div className="flex gap-2 border-b border-rose-500/20 bg-rose-500/10 p-4 text-[11px] leading-relaxed text-rose-400">
           <CircleAlert size={14} className="mt-0.5 shrink-0" />
           <span>
@@ -846,6 +909,170 @@ function Status({ health }) {
       />
       {health}
     </span>
+  );
+}
+
+function SuggestedComponents({ projectId, description, onConnect }) {
+  const updateProject = useUpdateProject();
+
+  const { data, isLoading } = useSuggestions(projectId);
+
+  const suggestions = data?.suggestions || [];
+
+  const dismissed = data?.dismissed || [];
+
+  const [editing, setEditing] = useState(!description);
+
+  const [draft, setDraft] = useState(description || "");
+
+  const save = () => {
+    updateProject.mutate(
+      { projectId, payload: { description: draft.trim() } },
+      {
+        onSuccess: () => setEditing(false),
+        onError: (error) => toast.error(error.message),
+      },
+    );
+  };
+
+  const setDismissed = (ids) => {
+    updateProject.mutate(
+      { projectId, payload: { dismissed_suggestions: ids } },
+      { onError: (error) => toast.error(error.message) },
+    );
+  };
+
+  const dismiss = (id) => setDismissed([...dismissed, id]);
+
+  const restore = () => setDismissed([]);
+
+  if (!projectId) return null;
+
+  if (editing) {
+    return (
+      <div className="panel mb-5 p-5">
+        <p className="eyebrow mb-1">What does this project use?</p>
+        <p className="mb-3 text-[12px] leading-relaxed text-[color:var(--text-dim)]">
+          Describe the stack and we will suggest components to connect. Stored
+          with the project — nothing is sent anywhere.
+        </p>
+        <textarea
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          rows={3}
+          placeholder="marketplace app, media uploads, mail receipts, cloudflare dns, r2 backups"
+          className="w-full resize-y rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-sunken)] px-3 py-2.5 text-[12px] leading-relaxed text-[color:var(--text)] outline-none placeholder:text-[color:var(--text-faint)] focus:border-[color:var(--brand)]"
+        />
+        <div className="mt-3 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={save}
+            disabled={updateProject.isPending}
+            className="btn-primary !py-1.5"
+          >
+            {updateProject.isPending ? "Saving…" : "Save & suggest"}
+          </button>
+          {description && (
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(description);
+                setEditing(false);
+              }}
+              className="btn-ghost !py-1.5"
+            >
+              Cancel
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <div className="panel mb-5 flex items-center gap-2.5 p-5 text-[12px] text-[color:var(--text-dim)]">
+        <Loader2 size={14} className="animate-spin" />
+        Reading the description and picking components…
+      </div>
+    );
+  }
+
+  if (!suggestions.length && !dismissed.length) return null;
+
+  return (
+    <div className="panel mb-5 p-5">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="eyebrow mb-1">Suggested for this project</p>
+          <p className="text-[12px] leading-relaxed text-[color:var(--text-dim)]">
+            Based on “{description}”.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="shrink-0 text-[11px] text-[color:var(--text-dim)] transition-colors hover:text-[color:var(--text)]"
+        >
+          Edit description
+        </button>
+      </div>
+      {suggestions.length ? (
+        <div className="space-y-2">
+          {suggestions.map((suggestion) => {
+            const { Icon } = brandFor(suggestion.id);
+
+            return (
+              <div
+                key={suggestion.id}
+                className="flex items-start gap-3 rounded-xl border border-[color:var(--border)] px-3.5 py-3"
+              >
+                <span className="well flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
+                  <Icon size={15} className="text-[color:var(--text-dim)]" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-medium text-[color:var(--text)]">
+                    {suggestion.name}
+                  </p>
+                  <p className="mt-0.5 text-[11px] leading-relaxed text-[color:var(--text-dim)]">
+                    {suggestion.description}
+                  </p>
+                  <p className="mt-1 font-mono text-[10px] text-[color:var(--text-faint)]">
+                    {suggestion.reason}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => dismiss(suggestion.id)}
+                  disabled={updateProject.isPending}
+                  aria-label={`Dismiss ${suggestion.name}`}
+                  className="mt-0.5 shrink-0 rounded-md p-1.5 text-[color:var(--text-faint)] transition-colors hover:bg-[color:var(--surface-sunken)] hover:text-[color:var(--text)]"
+                >
+                  <X size={13} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onConnect(suggestion.id)}
+                  className="btn-primary mt-0.5 shrink-0 !py-1.5"
+                >
+                  <Plus size={12} /> Add
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      ) : null}
+      {dismissed.length ? (
+        <button
+          type="button"
+          onClick={restore}
+          disabled={updateProject.isPending}
+          className="mt-3 text-[11px] text-[color:var(--text-dim)] transition-colors hover:text-[color:var(--text)]"
+        >
+          Restore {dismissed.length} dismissed
+        </button>
+      ) : null}
+    </div>
   );
 }
 

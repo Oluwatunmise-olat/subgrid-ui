@@ -69,7 +69,13 @@ export default function ToolRunDialog({ tool, onClose, onRun, isRunning }) {
     buildInitialFormValues(fields),
   );
 
+  const requiredFields = fields.filter((field) => field.required);
+
+  const optionalFields = fields.filter((field) => !field.required);
+
   const [advancedOpen, setAdvancedOpen] = useState(!simple);
+
+  const [showOptional, setShowOptional] = useState(optionalFields.length <= 3);
 
   const [jsonText, setJsonText] = useState("{}");
 
@@ -125,12 +131,12 @@ export default function ToolRunDialog({ tool, onClose, onRun, isRunning }) {
 
         {!advancedOpen && fields.length > 0 && (
           <div className="space-y-3">
-            {fields.map((field) => (
+            {requiredFields.map((field) => (
               <div key={field.key}>
                 <label className="mb-1.5 block text-xs font-medium text-[color:var(--text-dim)]">
                   {field.key}
 
-                  {field.required && <span className="text-rose-500"> *</span>}
+                  <span className="text-rose-500"> *</span>
 
                   {field.description && (
                     <span className="ml-1.5 font-normal text-[color:var(--text-faint)]">
@@ -147,6 +153,42 @@ export default function ToolRunDialog({ tool, onClose, onRun, isRunning }) {
                 />
               </div>
             ))}
+
+            {optionalFields.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowOptional((v) => !v)}
+                className="block font-mono text-[11px] text-[color:var(--text-faint)] transition-colors hover:text-[color:var(--text-dim)]"
+              >
+                {showOptional
+                  ? `− hide ${optionalFields.length} optional`
+                  : `+ ${optionalFields.length} optional filter${
+                      optionalFields.length === 1 ? "" : "s"
+                    }`}
+              </button>
+            )}
+
+            {showOptional &&
+              optionalFields.map((field) => (
+                <div key={field.key}>
+                  <label className="mb-1.5 block text-xs font-medium text-[color:var(--text-dim)]">
+                    {field.key}
+
+                    {field.description && (
+                      <span className="ml-1.5 font-normal text-[color:var(--text-faint)]">
+                        {field.description}
+                      </span>
+                    )}
+                  </label>
+                  <SchemaField
+                    field={field}
+                    value={formValues[field.key]}
+                    onChange={(v) =>
+                      setFormValues((prev) => ({ ...prev, [field.key]: v }))
+                    }
+                  />
+                </div>
+              ))}
           </div>
         )}
 

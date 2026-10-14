@@ -20,6 +20,20 @@ const projectsService = {
 
     return response;
   },
+
+  update: async (projectId, payload) => {
+    const response = await api.put(API_ROUTES.project(projectId), payload);
+
+    return response;
+  },
+
+  suggest: async (projectId, description) => {
+    const response = await api.post(API_ROUTES.projectSuggest(projectId), {
+      description,
+    });
+
+    return response;
+  },
 };
 
 export default projectsService;

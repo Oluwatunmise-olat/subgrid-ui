@@ -23,6 +23,14 @@ export default function EditServerDialog({
     (item) => item.id === (server.catalog_id || server.provider),
   );
 
+  const preset = catalog.presets.find((item) => item.id === server.catalog_id);
+
+  const fields = integration?.fields
+    ? integration.fields
+    : [...(preset?.fields || []), ...(preset?.optionalFields || [])];
+
+  const displayName = integration?.name || preset?.name || server.name;
+
   const { Icon } = brandFor(server.provider);
 
   const { data: passkeys = [] } = usePasskeys();
@@ -41,7 +49,7 @@ export default function EditServerDialog({
     e.preventDefault();
 
     const env = Object.fromEntries(
-      (integration?.fields || [])
+      fields
         .filter((field) => (values[field.key] || "").trim() !== "")
         .map((field) => [field.key, values[field.key].trim()]),
     );
@@ -91,7 +99,7 @@ export default function EditServerDialog({
               Edit {server.name}
             </h3>
             <p className="mt-0.5 text-[11px] text-[color:var(--text-dim)]">
-              {integration
+              {fields.length > 0
                 ? "Change credentials or configuration."
                 : "This component was added manually."}
             </p>
@@ -117,9 +125,9 @@ export default function EditServerDialog({
               />
             </div>
 
-            {integration ? (
+            {fields.length > 0 ? (
               <div className="space-y-3.5">
-                {integration.fields.map((field) => {
+                {fields.map((field) => {
                   const isSet = existingKeys.includes(field.key);
 
                   const warning =
@@ -207,8 +215,8 @@ export default function EditServerDialog({
               </div>
             ) : (
               <p className="text-[12px] leading-relaxed text-[color:var(--text-dim)]">
-                This component has a custom command/URL. Editing its credentials
-                isn't supported here yet.
+                This component has a custom command/URL with no declared
+                credentials, so there is nothing here to edit.
               </p>
             )}
 
@@ -222,7 +230,7 @@ export default function EditServerDialog({
                 <span className="text-[color:var(--text)]">
                   Connect a component
                 </span>{" "}
-                and use the “How to connect” guide for {integration?.name}.
+                and use the “How to connect” guide for {displayName}.
               </p>
             )}
           </div>
