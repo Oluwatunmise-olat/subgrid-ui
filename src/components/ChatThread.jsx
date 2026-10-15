@@ -641,7 +641,9 @@ function RunGraph({
 }) {
   const NODE_W = 340;
 
-  const ROW = 232;
+  const GAP = 64;
+
+  const FALLBACK_HEIGHT = 200;
 
   const nodes = useMemo(() => {
     const list = [];
@@ -657,27 +659,52 @@ function RunGraph({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [JSON.stringify(steps.map((s) => [s.id, s.status, s.output != null]))]);
 
-  const [pos, setPos] = useState(() =>
-    Object.fromEntries(nodes.map((n, i) => [n.key, { x: 0, y: i * ROW }])),
-  );
-
-  useEffect(() => {
-    setPos((prev) => {
-      const next = { ...prev };
-
-      nodes.forEach((n, i) => {
-        if (!next[n.key]) next[n.key] = { x: 0, y: i * ROW };
-      });
-
-      return next;
-    });
-  }, [nodes]);
-
   const containerRef = useRef(null);
 
   const nodeRefs = useRef({});
 
   const [geom, setGeom] = useState({});
+
+  // Manual drag offsets, keyed by node - sparse, so a node nobody has dragged
+  // stays on the automatic stack below and reflows as content above it grows
+  // or shrinks (a required field appearing, an approval panel opening).
+  const [overrides, setOverrides] = useState({});
+
+  useEffect(() => {
+    setOverrides((prev) => {
+      const next = {};
+
+      let changed = false;
+
+      for (const key of Object.keys(prev)) {
+        if (nodes.some((n) => n.key === key)) next[key] = prev[key];
+        else changed = true;
+      }
+
+      return changed ? next : prev;
+    });
+  }, [nodes]);
+
+  // Stacked purely from each node's own measured height, so a card that grows
+  // (a required field, an open approval panel) pushes everything below it
+  // down instead of overlapping it.
+  const autoY = useMemo(() => {
+    const next = {};
+
+    let cursor = 0;
+
+    for (const n of nodes) {
+      next[n.key] = cursor;
+
+      const g = geom[n.key];
+
+      cursor += (g ? g.bottom - g.top : FALLBACK_HEIGHT) + GAP;
+    }
+
+    return next;
+  }, [nodes, geom]);
+
+  const resolvedPos = (key) => overrides[key] || { x: 0, y: autoY[key] ?? 0 };
 
   const [layoutTick, setLayoutTick] = useState(0);
 
@@ -688,6 +715,23 @@ function RunGraph({
 
     return () => window.removeEventListener("resize", onResize);
   }, []);
+
+  // A card's height can change for reasons the node list never sees - opening
+  // "+ N optional", a textarea growing, an error message appearing. Watch the
+  // elements directly so the stack always restacks around their real size.
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+
+    const observer = new ResizeObserver(() => setLayoutTick((t) => t + 1));
+
+    for (const n of nodes) {
+      const el = nodeRefs.current[n.key];
+
+      if (el) observer.observe(el);
+    }
+
+    return () => observer.disconnect();
+  }, [nodes]);
 
   useLayoutEffect(() => {
     const next = {};
@@ -704,8 +748,21 @@ function RunGraph({
       };
     }
 
-    setGeom(next);
-  }, [nodes, pos, layoutTick]);
+    setGeom((prev) => {
+      const keys = new Set([...Object.keys(prev), ...Object.keys(next)]);
+
+      for (const key of keys) {
+        const a = prev[key];
+
+        const b = next[key];
+
+        if (!a || !b || a.cx !== b.cx || a.top !== b.top || a.bottom !== b.bottom)
+          return next;
+      }
+
+      return prev;
+    });
+  }, [nodes, overrides, autoY, layoutTick]);
 
   const dragFrom = useRef(null);
 
@@ -714,7 +771,7 @@ function RunGraph({
 
     e.stopPropagation();
 
-    const start = pos[key] || { x: 0, y: 0 };
+    const start = resolvedPos(key);
 
     const originX = e.clientX;
 
@@ -723,7 +780,7 @@ function RunGraph({
     document.body.style.userSelect = "none";
 
     const onMove = (ev) => {
-      setPos((prev) => ({
+      setOverrides((prev) => ({
         ...prev,
         [key]: {
           x: start.x + (ev.clientX - originX),
@@ -753,7 +810,7 @@ function RunGraph({
 
   const height = measured.length
     ? Math.max(...measured.map((g) => g.bottom)) + 64
-    : Math.max(...Object.values(pos).map((p) => p.y), 0) + 300;
+    : Math.max(...Object.values(autoY), 0) + FALLBACK_HEIGHT + 64;
 
   return (
     <div ref={containerRef} className="relative w-full" style={{ height }}>
@@ -792,20 +849,10 @@ function RunGraph({
         })}
       </svg>
 
-      {nodes.some((n, i) => {
-        const p = pos[n.key];
-
-        return p && (Math.round(p.x) !== 0 || Math.round(p.y) !== i * ROW);
-      }) && (
+      {Object.keys(overrides).length > 0 && (
         <button
           type="button"
-          onClick={() =>
-            setPos(
-              Object.fromEntries(
-                nodes.map((n, i) => [n.key, { x: 0, y: i * ROW }]),
-              ),
-            )
-          }
+          onClick={() => setOverrides({})}
           className="absolute right-0 top-0 z-30 rounded-lg border border-[color:var(--border)] bg-[color:var(--surface-raised)] px-2 py-1 font-mono text-[10px] text-[color:var(--text-faint)] transition-colors hover:text-[color:var(--text-dim)]"
         >
           reset layout
@@ -813,7 +860,7 @@ function RunGraph({
       )}
 
       {nodes.map((n) => {
-        const p = pos[n.key] || { x: 0, y: 0 };
+        const p = resolvedPos(n.key);
 
         const dragging = dragFrom.current === n.key;
 
@@ -829,6 +876,9 @@ function RunGraph({
               top: p.y,
               width: NODE_W,
               zIndex: dragging ? 20 : 10,
+              transition: dragging
+                ? "none"
+                : "top 240ms var(--ease), left 240ms var(--ease)",
             }}
           >
             <div
@@ -1050,39 +1100,44 @@ function StepNode({
       </div>
 
       {step.status === "pending" && fields.length > 0 && (
-        <div className="space-y-2.5 border-t border-[color:var(--border)] px-5 py-3">
-          {requiredFields.map(([key, propSchema]) => (
-            <StepField
-              key={key}
-              name={key}
-              schema={propSchema}
-              value={step.input[key] ?? ""}
-              required
-              onChange={(v) => onInput({ ...step.input, [key]: v })}
-            />
-          ))}
+        <div className="border-t border-[color:var(--border)] px-5 py-3">
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2.5">
+            {requiredFields.map(([key, propSchema]) => (
+              <StepField
+                key={key}
+                name={key}
+                schema={propSchema}
+                value={step.input[key] ?? ""}
+                required
+                onChange={(v) => onInput({ ...step.input, [key]: v })}
+              />
+            ))}
+          </div>
 
           {optionalFields.length > 0 && (
             <button
               type="button"
               onClick={() => setShowOptional((v) => !v)}
-              className="block font-mono text-[10px] text-[color:var(--text-faint)] transition-colors hover:text-[color:var(--text-dim)]"
+              className="mt-2.5 block font-mono text-[10px] text-[color:var(--text-faint)] transition-colors hover:text-[color:var(--text-dim)]"
             >
               {showOptional
                 ? "− hide optional"
                 : `+ ${optionalFields.length} optional`}
             </button>
           )}
-          {showOptional &&
-            optionalFields.map(([key, propSchema]) => (
-              <StepField
-                key={key}
-                name={key}
-                schema={propSchema}
-                value={step.input[key] ?? ""}
-                onChange={(v) => onInput({ ...step.input, [key]: v })}
-              />
-            ))}
+          {showOptional && (
+            <div className="mt-2.5 grid grid-cols-2 gap-x-3 gap-y-2.5">
+              {optionalFields.map(([key, propSchema]) => (
+                <StepField
+                  key={key}
+                  name={key}
+                  schema={propSchema}
+                  value={step.input[key] ?? ""}
+                  onChange={(v) => onInput({ ...step.input, [key]: v })}
+                />
+              ))}
+            </div>
+          )}
         </div>
       )}
 
@@ -1506,7 +1561,7 @@ function StepField({ name, schema, value, onChange, disabled, required }) {
   const Tag = long ? "textarea" : "input";
 
   return (
-    <label className={long ? "block sm:col-span-2" : "block"}>
+    <label className={long ? "block col-span-2" : "block"}>
       {label}
       <Tag
         value={value}
