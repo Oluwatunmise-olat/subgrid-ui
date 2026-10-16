@@ -1,10 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { queryClient } from "./lib/queryClient";
 import { setAuthErrorHandler } from "./services/api";
 import { useSessionStatus } from "./hooks/useQueryHooks";
+import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import ProjectShell from "./pages/ProjectShell";
 import Products from "./pages/Products";
@@ -14,6 +15,8 @@ function Gate() {
   const queryClient = useQueryClient();
 
   const { data: authenticated, isLoading } = useSessionStatus();
+
+  const [showLogin, setShowLogin] = useState(false);
 
   useEffect(() => {
     setAuthErrorHandler(() =>
@@ -30,6 +33,10 @@ function Gate() {
   }
 
   if (!authenticated) {
+    if (!showLogin) {
+      return <Landing onGetStarted={() => setShowLogin(true)} />;
+    }
+
     return (
       <Login
         onSignedIn={() => queryClient.setQueryData([QUERY_KEYS.session], true)}

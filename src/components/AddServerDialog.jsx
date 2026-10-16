@@ -947,8 +947,6 @@ export default function AddServerDialog({
 
   const integrations = catalog.integrations;
 
-  // A deep link can name a bridge preset (?connect=cloudflare-dns) rather than an
-  // integration — then we open the bridge picker already on that preset.
   const initialPresetId = catalog.presets.some(
     (item) => item.id === initialIntegrationId,
   )

@@ -665,9 +665,6 @@ function RunGraph({
 
   const [geom, setGeom] = useState({});
 
-  // Manual drag offsets, keyed by node - sparse, so a node nobody has dragged
-  // stays on the automatic stack below and reflows as content above it grows
-  // or shrinks (a required field appearing, an approval panel opening).
   const [overrides, setOverrides] = useState({});
 
   useEffect(() => {
@@ -685,9 +682,6 @@ function RunGraph({
     });
   }, [nodes]);
 
-  // Stacked purely from each node's own measured height, so a card that grows
-  // (a required field, an open approval panel) pushes everything below it
-  // down instead of overlapping it.
   const autoY = useMemo(() => {
     const next = {};
 
@@ -716,9 +710,6 @@ function RunGraph({
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // A card's height can change for reasons the node list never sees - opening
-  // "+ N optional", a textarea growing, an error message appearing. Watch the
-  // elements directly so the stack always restacks around their real size.
   useEffect(() => {
     if (typeof ResizeObserver === "undefined") return;
 
