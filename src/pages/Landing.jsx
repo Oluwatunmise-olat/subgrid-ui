@@ -87,7 +87,9 @@ function PreviewCard({ cardRef, pos, dragging, onPointerDown, children }) {
       style={{
         top: pos.y,
         transform: `translate(calc(-50% + ${pos.x}px), 0)`,
-        transition: dragging ? "none" : "top 240ms var(--ease), transform 240ms var(--ease)",
+        transition: dragging
+          ? "none"
+          : "top 240ms var(--ease), transform 240ms var(--ease)",
       }}
     >
       <span className="pointer-events-none absolute -top-2.5 left-1/2 z-20 -translate-x-1/2 rounded-full border border-[color:var(--border)] bg-[color:var(--surface-raised)] px-2 py-px font-mono text-[9px] uppercase tracking-wide text-[color:var(--text-faint)] opacity-0 transition-opacity duration-150 group-hover/card:opacity-100">
@@ -251,7 +253,10 @@ function PlanPreview() {
             </div>
           </div>
           <div className="flex items-center gap-2 border-t border-[color:var(--border)] px-5 py-3">
-            <Wrench size={12} className="shrink-0 text-[color:var(--text-faint)]" />
+            <Wrench
+              size={12}
+              className="shrink-0 text-[color:var(--text-faint)]"
+            />
             <span className="truncate font-mono text-[11.5px] text-[color:var(--text-dim)]">
               list_dns_records
             </span>
@@ -283,7 +288,9 @@ function PlanPreview() {
                 write
               </span>
             </div>
-            <div className={`mt-4 flex items-center gap-2 text-[13px] transition-colors duration-300 ${write.cls}`}>
+            <div
+              className={`mt-4 flex items-center gap-2 text-[13px] transition-colors duration-300 ${write.cls}`}
+            >
               <WriteIcon
                 size={13}
                 className={writeStatus === "running" ? "animate-spin" : ""}
@@ -292,7 +299,10 @@ function PlanPreview() {
             </div>
           </div>
           <div className="flex items-center gap-2 border-t border-[color:var(--border)] px-5 py-3">
-            <Wrench size={12} className="shrink-0 text-[color:var(--text-faint)]" />
+            <Wrench
+              size={12}
+              className="shrink-0 text-[color:var(--text-faint)]"
+            />
             <span className="truncate font-mono text-[11.5px] text-[color:var(--text-dim)]">
               delete_dns_record
             </span>
@@ -411,11 +421,11 @@ export default function Landing({ onGetStarted }) {
           </h1>
           <p className="mt-5 max-w-lg text-[15px] leading-relaxed text-[color:var(--text-dim)]">
             A DNS record here, an env var there, a bucket somewhere else —
-            routine infra changes shouldn't mean logging into a dozen
-            different dashboards. Subgrid connects to the infrastructure you
-            already run and lets you operate all of it from one place, by
-            describing what you want done. Every action is planned, shown
-            for approval, and logged.
+            routine infra changes shouldn't mean logging into a dozen different
+            dashboards. Subgrid connects to the infrastructure you already run
+            and lets you operate all of it from one place, by describing what
+            you want done. Every action is planned, shown for approval, and
+            logged.
           </p>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
             <button
@@ -478,8 +488,7 @@ export default function Landing({ onGetStarted }) {
               Runs on your infrastructure
             </h3>
             <p className="text-[12.5px] leading-relaxed text-[color:var(--text-dim)]">
-              Your secrets, your database, your audit log. Nothing phones
-              home.
+              Your secrets, your database, your audit log.
             </p>
           </div>
           <div className="flex flex-col gap-2.5">
@@ -488,8 +497,8 @@ export default function Landing({ onGetStarted }) {
               Passkey-gated secrets
             </h3>
             <p className="text-[12.5px] leading-relaxed text-[color:var(--text-dim)]">
-              The first passkey registered on an instance is the login —
-              storing or changing credentials needs a fresh approval.
+              The first passkey registered on an instance is the login — storing
+              or changing credentials needs a fresh approval.
             </p>
           </div>
           <div className="flex flex-col gap-2.5">
@@ -514,7 +523,7 @@ export default function Landing({ onGetStarted }) {
               <span className="eyebrow">Self-host it</span>
             </div>
             <pre className="mt-4 overflow-x-auto rounded-xl border border-[color:var(--border)] bg-[color:var(--surface-sunken)] p-4 font-mono text-[12px] leading-relaxed text-[color:var(--text-dim)]">
-{`cp .env.example .env   # set ENCRYPTION_KEY, APPROVAL_SECRET (openssl rand -hex 32)
+              {`cp .env.example .env   # set ENCRYPTION_KEY, APPROVAL_SECRET (openssl rand -hex 32)
 docker compose up -d   # builds the app image, runs migrations, starts the API`}
             </pre>
             <p className="mt-4 text-[12.5px] leading-relaxed text-[color:var(--text-dim)]">
@@ -529,8 +538,8 @@ docker compose up -d   # builds the app image, runs migrations, starts the API`}
               >
                 subgrid-ui
               </a>
-              ) over its own API. Full setup steps, required env vars, and
-              the API reference are in each repo's README.
+              ) over its own API. Full setup steps, required env vars, and the
+              API reference are in each repo's README.
             </p>
           </div>
         </section>
