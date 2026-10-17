@@ -14,8 +14,7 @@ import {
   X,
 } from "lucide-react";
 
-const REPO_URL = "https://github.com/Oluwatunmise-olat/subgrid";
-const UI_REPO_URL = "https://github.com/Oluwatunmise-olat/subgrid-ui";
+import { LINKS } from "../lib/constants";
 
 const STEPS = [
   {
@@ -401,7 +400,7 @@ export default function Landing({ onGetStarted }) {
           </span>
         </div>
         <a
-          href={REPO_URL}
+          href={LINKS.repo}
           target="_blank"
           rel="noreferrer"
           className="btn-ghost !py-2"
@@ -437,7 +436,7 @@ export default function Landing({ onGetStarted }) {
               <ArrowRight size={14} />
             </button>
             <a
-              href={`${REPO_URL}#self-hosting`}
+              href={`${LINKS.repo}#self-hosting`}
               target="_blank"
               rel="noreferrer"
               className="btn-ghost !px-5 !py-3 text-[14px]"
@@ -531,7 +530,7 @@ docker compose up -d   # builds the app image, runs migrations, starts the API`}
               `.env` is set. The backend above talks to this UI, a separate
               Vite/React app,{" "}
               <a
-                href={UI_REPO_URL}
+                href={LINKS.uiRepo}
                 target="_blank"
                 rel="noreferrer"
                 className="text-[color:var(--text)] underline underline-offset-2"
@@ -552,7 +551,7 @@ docker compose up -d   # builds the app image, runs migrations, starts the API`}
             nontrivial before sending a large PR.
           </p>
           <a
-            href={`${REPO_URL}#contributing`}
+            href={`${LINKS.repo}#contributing`}
             target="_blank"
             rel="noreferrer"
             className="font-mono text-[11px] text-[color:var(--text-faint)] transition-colors hover:text-[color:var(--text-dim)]"

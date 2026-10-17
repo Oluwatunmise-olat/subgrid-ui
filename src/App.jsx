@@ -40,6 +40,7 @@ function Gate() {
     return (
       <Login
         onSignedIn={() => queryClient.setQueryData([QUERY_KEYS.session], true)}
+        onBack={() => setShowLogin(false)}
       />
     );
   }

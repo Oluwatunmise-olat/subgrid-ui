@@ -1,14 +1,19 @@
 import { useState } from "react";
-import { Fingerprint, KeyRound } from "lucide-react";
+import { ArrowLeft, Fingerprint, KeyRound, RotateCw, ServerOff } from "lucide-react";
 import toast from "react-hot-toast";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { usePasskeysExist } from "../hooks/useQueryHooks";
 import { registerPasskey, requestApproval } from "../lib/webauthn";
-import { QUERY_KEYS } from "../lib/constants";
+import { LINKS, QUERY_KEYS } from "../lib/constants";
 
-export default function Login({ onSignedIn }) {
-  const { data: hasPasskeys, isLoading } = usePasskeysExist();
+export default function Login({ onSignedIn, onBack }) {
+  const {
+    data: hasPasskeys,
+    isLoading,
+    isError,
+    refetch,
+  } = usePasskeysExist();
 
   const [isBusy, setIsBusy] = useState(false);
 
@@ -78,7 +83,48 @@ export default function Login({ onSignedIn }) {
           </span>
         </div>
 
-        {isLoading ? (
+        {isError ? (
+          <>
+            <div className="eyebrow mb-3 text-amber-400">Server unreachable</div>
+            <div className="well mb-5 flex h-11 w-11 items-center justify-center rounded-xl">
+              <ServerOff size={18} className="text-[color:var(--text-dim)]" />
+            </div>
+            <h1 className="font-display mb-2 text-[30px] font-semibold text-[color:var(--text)]">
+              No Subgrid server found.
+            </h1>
+            <p className="mb-8 max-w-sm text-[13px] leading-relaxed text-[color:var(--text-dim)]">
+              Subgrid is only self-hosted right now. Subgrid Cloud is coming
+              soon.{" "}
+              <a
+                href={`${LINKS.repo}#self-hosting`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[color:var(--brand)] hover:underline"
+              >
+                See the self-hosting guide
+              </a>
+              .
+            </p>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => refetch()}
+                className="btn-primary !py-3 text-[14px]"
+              >
+                <RotateCw size={14} /> Try again
+              </button>
+              {onBack && (
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="btn-ghost !py-3 text-[14px]"
+                >
+                  <ArrowLeft size={14} /> Back
+                </button>
+              )}
+            </div>
+          </>
+        ) : isLoading ? (
           <div className="text-xs text-[color:var(--text-faint)]">
             Loading...
           </div>

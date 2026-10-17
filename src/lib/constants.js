@@ -19,6 +19,11 @@ export const STORAGE_KEYS = {
 
 export const DESTRUCTIVE_TOOL_KEYWORDS = ["delete", "remove", "drop", "destroy", "revoke", "purge"];
 
+export const LINKS = {
+  repo: "https://github.com/Oluwatunmise-olat/subgrid",
+  uiRepo: "https://github.com/Oluwatunmise-olat/subgrid-ui",
+};
+
 export const API_ROUTES = {
   projects: "/projects",
   project: (id) => `/projects/${id}`,
