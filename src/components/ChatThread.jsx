@@ -8,6 +8,7 @@ import {
   Check,
   Edit3,
   HelpCircle,
+  KeyRound,
   Loader2,
   Play,
   RotateCw,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react";
 import {
   useAllServerTools,
+  useLlmSettings,
   useWorkflow,
   useUpdateWorkflow,
   useApproveWorkflow,
@@ -25,6 +27,7 @@ import {
   useRetryWorkflowStep,
 } from "../hooks/useQueryHooks";
 import { brandFor } from "../lib/brand";
+import LlmKeyDialog from "./LlmKeyDialog";
 import planningService from "../services/planning.service";
 
 const HISTORY_TURNS = 8;
@@ -112,6 +115,10 @@ export default function ChatThread({
 
   const [isPlanning, setIsPlanning] = useState(false);
 
+  const [showLlmKeyDialog, setShowLlmKeyDialog] = useState(false);
+
+  const { data: llmSettings } = useLlmSettings();
+
   const scrollRef = useRef(null);
 
   const seededTextRef = useRef(null);
@@ -189,7 +196,13 @@ export default function ChatThread({
     } catch (err) {
       setThread((prev) => [
         ...prev,
-        { id: nid("a"), role: "assistant", kind: "error", text: err.message },
+        {
+          id: nid("a"),
+          role: "assistant",
+          kind: "error",
+          code: err.data?.data?.code,
+          text: err.message,
+        },
       ]);
     } finally {
       pendingSubmitRef.current = null;
@@ -267,6 +280,7 @@ export default function ChatThread({
                 turn={turn}
                 onConnectExecution={onConnectExecution}
                 onOpenComponents={onOpenComponents}
+                onOpenLlmKeyDialog={() => setShowLlmKeyDialog(true)}
               />
             ),
           )}
@@ -304,6 +318,22 @@ export default function ChatThread({
             className="min-h-[36px] max-h-32 flex-1 resize-none overflow-y-auto bg-transparent py-2 font-mono text-[13px] leading-6 text-[color:var(--text)] placeholder:text-[color:var(--text-faint)] focus:outline-none"
           />
           <button
+            type="button"
+            onClick={() => setShowLlmKeyDialog(true)}
+            title={
+              llmSettings.configured
+                ? "Planner API key is configured"
+                : "Add an API key to enable the plain-language planner"
+            }
+            className={`mb-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border transition-colors ${
+              llmSettings.configured
+                ? "border-[color:var(--brand-line)] text-[color:var(--brand)]"
+                : "border-[color:var(--border)] text-[color:var(--text-faint)] hover:text-[color:var(--text-dim)]"
+            }`}
+          >
+            <KeyRound size={13} />
+          </button>
+          <button
             type="submit"
             disabled={!input.trim() || isPlanning}
             className="btn-brand mb-1 !h-8 !w-8 shrink-0 !p-0 justify-center"
@@ -316,6 +346,9 @@ export default function ChatThread({
           </button>
         </form>
       </div>
+      {showLlmKeyDialog && (
+        <LlmKeyDialog onClose={() => setShowLlmKeyDialog(false)} />
+      )}
       {selectedResult && (
         <ResultDrawer
           step={selectedResult}
@@ -330,7 +363,12 @@ export default function ChatThread({
   );
 }
 
-function AssistantMessage({ turn, onConnectExecution, onOpenComponents }) {
+function AssistantMessage({
+  turn,
+  onConnectExecution,
+  onOpenComponents,
+  onOpenLlmKeyDialog,
+}) {
   const isError = turn.kind === "error";
 
   const isQuestion = turn.kind === "question";
@@ -369,6 +407,15 @@ function AssistantMessage({ turn, onConnectExecution, onOpenComponents }) {
               Connect a component <ArrowUp size={11} className="rotate-45" />
             </button>
           )}
+        {turn.code === "missing-llm-key" && onOpenLlmKeyDialog && (
+          <button
+            type="button"
+            onClick={onOpenLlmKeyDialog}
+            className="mt-1 inline-flex w-fit items-center gap-1 rounded-lg border border-white/[0.12] px-2.5 py-1.5 text-[11px] text-[color:var(--text)] transition-colors hover:bg-white/[0.06]"
+          >
+            <KeyRound size={11} /> Add your API key
+          </button>
+        )}
       </div>
     </div>
   );

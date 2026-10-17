@@ -8,6 +8,7 @@ import {
 import mcpRegistryService from "../services/mcp-registry.service";
 import catalogService from "../services/catalog.service";
 import orchestratorService from "../services/orchestrator.service";
+import llmSettingsService from "../services/llm-settings.service";
 import projectsService from "../services/projects.service";
 import securityService from "../services/security.service";
 import workflowService from "../services/workflow.service";
@@ -245,6 +246,45 @@ export const useLogout = () => {
     mutationFn: () => securityService.logout(),
     onSuccess: () => {
       queryClient.setQueryData([QUERY_KEYS.session], false);
+    },
+  });
+};
+
+const EMPTY_LLM_SETTINGS = { configured: false, provider: null, source: null };
+
+export const useLlmSettings = () => {
+  const query = useQuery({
+    queryKey: [QUERY_KEYS.llmSettings],
+    queryFn: async () => {
+      const response = await llmSettingsService.status();
+
+      return response?.data || EMPTY_LLM_SETTINGS;
+    },
+    staleTime: 60_000,
+  });
+
+  return { ...query, data: query.data || EMPTY_LLM_SETTINGS };
+};
+
+export const useSetLlmSettings = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ provider, apiKey, approvalToken }) =>
+      llmSettingsService.set(provider, apiKey, approvalToken),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.llmSettings] });
+    },
+  });
+};
+
+export const useClearLlmSettings = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (approvalToken) => llmSettingsService.clear(approvalToken),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [QUERY_KEYS.llmSettings] });
     },
   });
 };

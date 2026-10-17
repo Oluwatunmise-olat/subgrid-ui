@@ -20,7 +20,7 @@ const UI_REPO_URL = "https://github.com/Oluwatunmise-olat/subgrid-ui";
 const STEPS = [
   {
     title: "Connect a component",
-    body: "Cloudflare, Coolify, Resend, R2 — anything that speaks MCP. Credentials are encrypted at rest.",
+    body: "A real MCP server, or a plain REST API or S3-compatible storage service through Subgrid's own bridge. Credentials are encrypted at rest.",
   },
   {
     title: "Describe what you want done",
@@ -380,7 +380,7 @@ function PlanPreview() {
               </span>
             </div>
             <p className="px-5 pb-4 text-[13px] leading-relaxed text-[color:var(--text-dim)]">
-              Declined — nothing was sent to Cloudflare. The record is
+              Declined. Nothing was sent to Cloudflare. The record is
               untouched.
             </p>
           </div>
@@ -420,8 +420,8 @@ export default function Landing({ onGetStarted }) {
             End dashboard fatigue.
           </h1>
           <p className="mt-5 max-w-lg text-[15px] leading-relaxed text-[color:var(--text-dim)]">
-            A DNS record here, an env var there, a bucket somewhere else —
-            routine infra changes shouldn't mean logging into a dozen different
+            A DNS record here, an env var there, a bucket somewhere else.
+            Routine infra changes shouldn't mean logging into a dozen different
             dashboards. Subgrid connects to the infrastructure you already run
             and lets you operate all of it from one place, by describing what
             you want done. Every action is planned, shown for approval, and
@@ -457,7 +457,7 @@ export default function Landing({ onGetStarted }) {
             <PlanPreview />
 
             <p className="mt-6 max-w-sm text-center text-[11.5px] leading-relaxed text-[color:var(--text-faint)]">
-              The record id is looked up for you and never shown — the write
+              The record id is looked up for you and never shown. The write
               step is the only one that pauses for approval. Try it: drag the
               cards around, then click Allow.
             </p>
@@ -497,8 +497,8 @@ export default function Landing({ onGetStarted }) {
               Passkey-gated secrets
             </h3>
             <p className="text-[12.5px] leading-relaxed text-[color:var(--text-dim)]">
-              The first passkey registered on an instance is the login — storing
-              or changing credentials needs a fresh approval.
+              The first passkey registered on an instance is the login.
+              Storing or changing credentials needs a fresh approval.
             </p>
           </div>
           <div className="flex flex-col gap-2.5">
@@ -508,7 +508,7 @@ export default function Landing({ onGetStarted }) {
             </h3>
             <p className="text-[12.5px] leading-relaxed text-[color:var(--text-dim)]">
               Catalog presets run through Subgrid's own bridge code, not a
-              third-party package — your credentials never leave Subgrid's
+              third-party package, so your credentials never leave Subgrid's
               process. The catalog is still small; you can also connect any
               community MCP server, but that's a third party's code handling
               your keys, so only do it if you trust who built it.
@@ -527,9 +527,9 @@ export default function Landing({ onGetStarted }) {
 docker compose up -d   # builds the app image, runs migrations, starts the API`}
             </pre>
             <p className="mt-4 text-[12.5px] leading-relaxed text-[color:var(--text-dim)]">
-              No separate build step, no manual migration — one command once
-              `.env` is set. The backend above talks to this UI (a separate
-              Vite/React app —{" "}
+              No separate build step, no manual migration. One command once
+              `.env` is set. The backend above talks to this UI, a separate
+              Vite/React app,{" "}
               <a
                 href={UI_REPO_URL}
                 target="_blank"
@@ -538,7 +538,7 @@ docker compose up -d   # builds the app image, runs migrations, starts the API`}
               >
                 subgrid-ui
               </a>
-              ) over its own API. Full setup steps, required env vars, and the
+              , over its own API. Full setup steps, required env vars, and the
               API reference are in each repo's README.
             </p>
           </div>

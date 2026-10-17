@@ -9,6 +9,7 @@ export const QUERY_KEYS = {
   workflows: "workflow",
   passkeys: "passkeys",
   passkeysExist: "passkeys-exist",
+  llmSettings: "llm-settings",
 };
 
 export const STORAGE_KEYS = {
@@ -23,6 +24,7 @@ export const API_ROUTES = {
   project: (id) => `/projects/${id}`,
   projectSuggest: (id) => `/projects/${id}/suggest-components`,
   projectPlan: (id) => `/projects/${id}/plan`,
+  llmSettings: "/llm-settings",
 
   mcpServers: "/mcp-servers",
   mcpServer: (id) => `/mcp-servers/${id}`,
