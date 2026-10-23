@@ -40,6 +40,15 @@ const workflowService = {
 
     return response;
   },
+
+  selectStepOption: async (workflowId, stepId, value) => {
+    const response = await api.post(
+      API_ROUTES.workflowSelectStepOption(workflowId, stepId),
+      { value },
+    );
+
+    return response;
+  },
 };
 
 export default workflowService;

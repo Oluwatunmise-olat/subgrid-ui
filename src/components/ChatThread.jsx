@@ -25,6 +25,7 @@ import {
   useCancelWorkflow,
   useExecuteWorkflow,
   useRetryWorkflowStep,
+  useSelectStepOption,
 } from "../hooks/useQueryHooks";
 import { brandFor } from "../lib/brand";
 import LlmKeyDialog from "./LlmKeyDialog";
@@ -464,6 +465,8 @@ function WorkflowCard({
 
   const retryStep = useRetryWorkflowStep();
 
+  const selectStepOption = useSelectStepOption();
+
   const [adding, setAdding] = useState(false);
 
   const [editing, setEditing] = useState(false);
@@ -545,6 +548,7 @@ function WorkflowCard({
         updateWorkflow={updateWorkflow}
         retryStep={retryStep}
         cancelWorkflow={cancelWorkflow}
+        selectStepOption={selectStepOption}
         onInspectResult={onInspectResult}
       />
 
@@ -684,6 +688,7 @@ function RunGraph({
   updateWorkflow,
   retryStep,
   cancelWorkflow,
+  selectStepOption,
   onInspectResult,
 }) {
   const NODE_W = 420;
@@ -978,6 +983,12 @@ function RunGraph({
                       { onError: (err) => toast.error(err.message) },
                     )
                   }
+                  onSelectOption={(value) =>
+                    selectStepOption.mutate(
+                      { workflowId, stepId: n.step.id, value },
+                      { onError: (err) => toast.error(err.message) },
+                    )
+                  }
                 />
               ) : (
                 <ResultNode
@@ -1043,6 +1054,8 @@ function ResultNode({ step, onOpen }) {
   );
 }
 
+const SELECT_SENTINEL = /^\{\{select:step\d+\}\}$/;
+
 function StepNode({
   step,
   servers,
@@ -1054,6 +1067,7 @@ function StepNode({
   onRetry,
   onDecline,
   onAllowAlways,
+  onSelectOption,
 }) {
   const [showOptional, setShowOptional] = useState(false);
 
@@ -1061,7 +1075,13 @@ function StepNode({
 
   const { Icon } = brandFor(server?.provider || "");
 
-  const fields = Object.entries(schema || {});
+  const pendingField = Object.entries(step.input || {}).find(
+    ([, v]) => typeof v === "string" && SELECT_SENTINEL.test(v),
+  )?.[0];
+
+  const fields = Object.entries(schema || {}).filter(
+    ([key]) => key !== pendingField,
+  );
 
   const requiredInputs = step.capability?.requiredInputs || [];
 
@@ -1073,33 +1093,43 @@ function StepNode({
 
   const awaitingConfirm = step.status === "pending" && step.requires_approval;
 
-  const state = awaitingConfirm
+  const awaitingSelection = step.status === "pending" && Boolean(pendingField);
+
+  const state = awaitingSelection
     ? {
-        label: "Needs approval",
-        cls: "text-amber-400",
-        node: <AlertTriangle size={13} />,
+        label: step.selection_options?.length
+          ? "Pick a value"
+          : "Waiting on a previous step",
+        cls: "text-[color:var(--brand)]",
+        node: <HelpCircle size={13} />,
       }
-    : step.status === "succeeded"
+    : awaitingConfirm
       ? {
-          label: "Completed",
-          cls: "text-emerald-400",
-          node: <Check size={13} />,
+          label: "Needs approval",
+          cls: "text-amber-400",
+          node: <AlertTriangle size={13} />,
         }
-      : step.status === "failed"
-        ? { label: "Failed", cls: "text-rose-400", node: <X size={13} /> }
-        : step.status === "running"
-          ? {
-              label: "Running…",
-              cls: "text-[color:var(--brand)]",
-              node: <Loader2 size={13} className="animate-spin" />,
-            }
-          : {
-              label: "Ready to run",
-              cls: "text-[color:var(--text-dim)]",
-              node: (
-                <span className="h-2 w-2 rounded-full border border-[color:var(--text-faint)]" />
-              ),
-            };
+      : step.status === "succeeded"
+        ? {
+            label: "Completed",
+            cls: "text-emerald-400",
+            node: <Check size={13} />,
+          }
+        : step.status === "failed"
+          ? { label: "Failed", cls: "text-rose-400", node: <X size={13} /> }
+          : step.status === "running"
+            ? {
+                label: "Running…",
+                cls: "text-[color:var(--brand)]",
+                node: <Loader2 size={13} className="animate-spin" />,
+              }
+            : {
+                label: "Ready to run",
+                cls: "text-[color:var(--text-dim)]",
+                node: (
+                  <span className="h-2 w-2 rounded-full border border-[color:var(--text-faint)]" />
+                ),
+              };
 
   return (
     <div
@@ -1147,6 +1177,37 @@ function StepNode({
           </button>
         )}
       </div>
+
+      {awaitingSelection && (
+        <div className="border-t border-[color:var(--border)] px-5 py-3">
+          <label className="mb-1.5 block font-mono text-[11px] text-[color:var(--text-faint)]">
+            {pendingField}
+          </label>
+          {step.selection_options?.length ? (
+            <select
+              defaultValue=""
+              onChange={(e) => {
+                if (e.target.value) onSelectOption(e.target.value);
+              }}
+              className="w-full rounded-lg border border-[color:var(--border)] bg-[color:var(--surface)] px-2.5 py-2 text-[12.5px] text-[color:var(--text)] outline-none focus:border-[color:var(--brand)]"
+            >
+              <option value="" disabled>
+                Choose one…
+              </option>
+              {step.selection_options.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p className="text-[11.5px] leading-relaxed text-[color:var(--text-faint)]">
+              Run the step above first — the options here come from its
+              result.
+            </p>
+          )}
+        </div>
+      )}
 
       {step.status === "pending" && fields.length > 0 && (
         <div className="border-t border-[color:var(--border)] px-5 py-3">

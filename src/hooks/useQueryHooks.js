@@ -406,6 +406,20 @@ export const useRetryWorkflowStep = () => {
   });
 };
 
+export const useSelectStepOption = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ workflowId, stepId, value }) =>
+      workflowService.selectStepOption(workflowId, stepId, value),
+    onSuccess: (_data, { workflowId }) => {
+      queryClient.invalidateQueries({
+        queryKey: [QUERY_KEYS.workflows, workflowId],
+      });
+    },
+  });
+};
+
 export const useActionHistory = (serverId, projectId) => {
   return useQuery({
     queryKey: [QUERY_KEYS.actionHistory, serverId, projectId],

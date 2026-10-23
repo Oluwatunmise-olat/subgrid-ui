@@ -47,4 +47,5 @@ export const API_ROUTES = {
   workflowCancel: (id) => `/workflows/${id}/cancel`,
   workflowExecute: (id) => `/workflows/${id}/execute`,
   workflowRetryStep: (id, stepId) => `/workflows/${id}/steps/${stepId}/retry`,
+  workflowSelectStepOption: (id, stepId) => `/workflows/${id}/steps/${stepId}/select`,
 };
