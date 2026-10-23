@@ -1771,7 +1771,36 @@ function nextStepSuggestions(step) {
 }
 
 function StepField({ name, schema, value, onChange, disabled, required }) {
-  const empty = value === "" || value === undefined || value === null;
+  const [draft, setDraft] = useState(value ?? "");
+  const lastSent = useRef(value ?? "");
+  const debounceRef = useRef(null);
+
+  useEffect(() => {
+    if (value !== lastSent.current) {
+      setDraft(value ?? "");
+      lastSent.current = value ?? "";
+    }
+  }, [value]);
+
+  useEffect(
+    () => () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    },
+    [],
+  );
+
+  const commit = (v) => {
+    setDraft(v);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    debounceRef.current = setTimeout(() => {
+      lastSent.current = v;
+      onChange(v);
+    }, 400);
+  };
+
+  const empty = draft === "" || draft === undefined || draft === null;
 
   const highlight = required && empty;
 
@@ -1792,8 +1821,8 @@ function StepField({ name, schema, value, onChange, disabled, required }) {
       <label className="block">
         {label}
         <select
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
+          value={draft}
+          onChange={(e) => commit(e.target.value)}
           disabled={disabled}
           className={fieldCls}
         >
@@ -1821,14 +1850,14 @@ function StepField({ name, schema, value, onChange, disabled, required }) {
     <label className={long ? "block col-span-2" : "block"}>
       {label}
       <Tag
-        value={value}
+        value={draft}
         rows={isCode ? 12 : long ? 2 : undefined}
         type={
           !long && (schema?.type === "number" || schema?.type === "integer")
             ? "number"
             : "text"
         }
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => commit(e.target.value)}
         disabled={disabled}
         placeholder={schema?.description || name}
         className={`${fieldCls} ${isCode ? "resize-y bg-[color:var(--surface-sunken)] leading-relaxed" : ""}`}
