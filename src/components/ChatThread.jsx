@@ -1202,8 +1202,7 @@ function StepNode({
             </select>
           ) : (
             <p className="text-[11.5px] leading-relaxed text-[color:var(--text-faint)]">
-              Run the step above first — the options here come from its
-              result.
+              Run the step above first — the options here come from its result.
             </p>
           )}
         </div>
@@ -1320,6 +1319,16 @@ function formatCell(value) {
   return String(value);
 }
 
+function formatValuePretty(value) {
+  if (value === null || value === undefined) return "—";
+
+  if (typeof value === "object") return JSON.stringify(value, null, 2);
+
+  if (typeof value === "boolean") return value ? "true" : "false";
+
+  return String(value);
+}
+
 // Some tools return tabular results as "col1|col2\nval1|val2\n..."
 function parsePipeTable(value) {
   if (typeof value !== "string" || !value.includes("|")) return null;
@@ -1382,14 +1391,45 @@ function PipeTable({ cols, rows }) {
   );
 }
 
+function splitHttpBridgeResult(raw) {
+  const match = raw.match(/^(HTTP \d+\n\S+)\n\n([\s\S]*)$/);
+
+  if (!match) return { header: null, body: raw, hint: null };
+
+  const hintMatch = match[2].match(/\n\nLikely missing permission: (.+)$/);
+
+  return {
+    header: match[1],
+    body: hintMatch ? match[2].slice(0, hintMatch.index) : match[2],
+    hint: hintMatch ? hintMatch[1] : null,
+  };
+}
+
 function ToolOutput({ raw, failed }) {
+  const { header, body, hint } = splitHttpBridgeResult(raw);
+
   let parsed = null;
 
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(body);
   } catch {
     parsed = null;
   }
+
+  const headerLine = (
+    <>
+      {header && (
+        <p className="mb-2.5 font-mono text-[10.5px] text-[color:var(--text-faint)]">
+          {header}
+        </p>
+      )}
+      {hint && (
+        <p className="mb-2.5 text-[11.5px] text-amber-400">
+          Likely missing permission: {hint}
+        </p>
+      )}
+    </>
+  );
 
   const rows = Array.isArray(parsed) ? parsed : null;
 
@@ -1406,39 +1446,42 @@ function ToolOutput({ raw, failed }) {
     const cols = [...new Set(rows.flatMap((r) => Object.keys(r)))].slice(0, 6);
 
     return (
-      <div className="overflow-hidden rounded-xl border border-[color:var(--border)]">
-        <table className="w-full text-left">
-          <thead>
-            <tr className="border-b border-[color:var(--border)] bg-[color:var(--surface-sunken)]">
-              {cols.map((c) => (
-                <th
-                  key={c}
-                  className="px-3.5 py-2 font-mono text-[10px] font-medium uppercase tracking-wider text-[color:var(--text-faint)]"
-                >
-                  {c}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr
-                key={i}
-                className={i ? "border-t border-[color:var(--border)]" : ""}
-              >
+      <>
+        {headerLine}
+        <div className="overflow-hidden rounded-xl border border-[color:var(--border)]">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="border-b border-[color:var(--border)] bg-[color:var(--surface-sunken)]">
                 {cols.map((c) => (
-                  <td
+                  <th
                     key={c}
-                    className="px-3.5 py-2.5 font-mono text-[11.5px] text-[color:var(--text)]"
+                    className="px-3.5 py-2 font-mono text-[10px] font-medium uppercase tracking-wider text-[color:var(--text-faint)]"
                   >
-                    {formatCell(r[c])}
-                  </td>
+                    {c}
+                  </th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr
+                  key={i}
+                  className={i ? "border-t border-[color:var(--border)]" : ""}
+                >
+                  {cols.map((c) => (
+                    <td
+                      key={c}
+                      className="px-3.5 py-2.5 font-mono text-[11.5px] break-words text-[color:var(--text)]"
+                    >
+                      {formatCell(r[c])}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>
     );
   }
 
@@ -1456,38 +1499,49 @@ function ToolOutput({ raw, failed }) {
     });
 
     return (
-      <div className="overflow-hidden rounded-xl border border-[color:var(--border)]">
-        {entries.map(([k, v], i) => {
-          const table = parsePipeTable(v);
+      <>
+        {headerLine}
+        <div className="overflow-hidden rounded-xl border border-[color:var(--border)]">
+          {entries.map(([k, v], i) => {
+            const table = parsePipeTable(v);
 
-          return (
-            <div
-              key={k}
-              className={`flex items-start gap-4 px-3.5 py-2.5 ${i ? "border-t border-[color:var(--border)]" : ""}`}
-            >
-              <span className="w-36 shrink-0 font-mono text-[11px] text-[color:var(--text-faint)]">
-                {k}
-              </span>
-              <span className="min-w-0 flex-1 break-words font-mono text-[11.5px] whitespace-pre-wrap text-[color:var(--text)]">
-                {table ? (
-                  <PipeTable cols={table.cols} rows={table.rows} />
-                ) : (
-                  formatCell(v)
-                )}
-              </span>
-            </div>
-          );
-        })}
-      </div>
+            return (
+              <div
+                key={k}
+                className={`flex items-start gap-4 px-3.5 py-2.5 ${i ? "border-t border-[color:var(--border)]" : ""}`}
+              >
+                <span className="w-36 shrink-0 font-mono text-[11px] text-[color:var(--text-faint)]">
+                  {k}
+                </span>
+                <span className="min-w-0 flex-1 break-words font-mono text-[11.5px] whitespace-pre-wrap text-[color:var(--text)]">
+                  {table ? (
+                    <PipeTable cols={table.cols} rows={table.rows} />
+                  ) : (
+                    formatValuePretty(v)
+                  )}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </>
     );
   }
 
+  const fallbackText =
+    parsed !== null
+      ? JSON.stringify(parsed, null, 2)
+      : body || raw || "No output.";
+
   return (
-    <pre
-      className={`max-h-[48vh] overflow-auto rounded-xl border p-4 font-mono text-[11.5px] leading-relaxed whitespace-pre-wrap ${failed ? "border-rose-400/25 bg-rose-400/[0.04] text-rose-400" : "border-[color:var(--border)] bg-[color:var(--surface-sunken)] text-[color:var(--text-dim)]"}`}
-    >
-      {raw || "No output."}
-    </pre>
+    <>
+      {headerLine}
+      <pre
+        className={`max-h-[48vh] overflow-auto rounded-xl border p-4 font-mono text-[11.5px] leading-relaxed break-words whitespace-pre-wrap ${failed ? "border-rose-400/25 bg-rose-400/[0.04] text-rose-400" : "border-[color:var(--border)] bg-[color:var(--surface-sunken)] text-[color:var(--text-dim)]"}`}
+      >
+        {fallbackText}
+      </pre>
+    </>
   );
 }
 
