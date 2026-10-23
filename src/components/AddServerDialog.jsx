@@ -36,27 +36,40 @@ const fieldWarning = (key, value) => {
   return null;
 };
 
-function PickerList({ onPick, selectedId }) {
+function PickerList({ onPick, onPickPreset, selectedId, selectedPresetId }) {
   const { data: catalog } = useCatalog();
 
   const integrations = catalog.integrations;
 
+  const presets = catalog.presets;
+
   const [q, setQ] = useState("");
 
-  const filtered = integrations.filter(
+  const query = q.trim().toLowerCase();
+
+  const filteredIntegrations = integrations.filter(
     (i) =>
-      !q.trim() ||
-      `${i.name} ${i.description} ${i.id}`
+      !query ||
+      `${i.name} ${i.description} ${i.id}`.toLowerCase().includes(query),
+  );
+
+  const filteredPresets = presets.filter(
+    (p) =>
+      !query ||
+      `${p.name} ${p.description} ${p.id} ${p.provider}`
         .toLowerCase()
-        .includes(q.trim().toLowerCase()),
+        .includes(query),
   );
 
   const grouped = Object.keys(catalog.categories)
     .map((category) => ({
       category,
-      items: filtered.filter((i) => i.category === category),
+      items: filteredIntegrations.filter((i) => i.category === category),
+      presetItems: filteredPresets.filter((p) => p.category === category),
     }))
-    .filter((g) => g.items.length);
+    .filter((g) => g.items.length || g.presetItems.length);
+
+  const totalMatches = filteredIntegrations.length + filteredPresets.length;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -66,19 +79,19 @@ function PickerList({ onPick, selectedId }) {
           autoFocus
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search Cloudinary, Resend, DNS..."
+          placeholder="Search Cloudinary, Resend, PostHog..."
           className="w-full bg-transparent text-[13px] text-[color:var(--text)] placeholder:text-[color:var(--text-faint)] focus:outline-none"
         />
       </div>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
-        {grouped.map(({ category, items }) => (
+        {grouped.map(({ category, items, presetItems }) => (
           <div key={category}>
             <h4 className="eyebrow mb-1.5 px-1">{catalog.categories[category]}</h4>
             <div className="space-y-1">
               {items.map((integration) => {
                 const { Icon } = brandFor(integration.id);
 
-                const active = selectedId === integration.id;
+                const active = !selectedPresetId && selectedId === integration.id;
 
                 return (
                   <button
@@ -131,11 +144,57 @@ function PickerList({ onPick, selectedId }) {
                   </button>
                 );
               })}
+              {presetItems.map((preset) => {
+                const { Icon } = brandFor(preset.provider);
+
+                const active = selectedPresetId === preset.id;
+
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => onPickPreset(preset.id)}
+                    className={`connector-option group flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition-all ${
+                      active
+                        ? "connector-option-active"
+                        : "border-transparent hover:border-[color:var(--border)] hover:bg-[color:var(--surface-sunken)]"
+                    }`}
+                  >
+                    <div className="well flex h-9 w-9 shrink-0 items-center justify-center rounded-lg">
+                      <Icon
+                        size={15}
+                        strokeWidth={1.8}
+                        className="text-[color:var(--text-dim)]"
+                      />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="truncate text-[13px] font-medium text-[color:var(--text)]">
+                          {preset.name}
+                        </span>
+                        <span
+                          title="Runs through Subgrid's own vendor-API bridge"
+                          className="shrink-0 rounded border border-[color:var(--border)] px-1 py-px font-mono text-[9px] uppercase tracking-wide text-[color:var(--text-faint)]"
+                        >
+                          {preset.kind === "s3" ? "S3" : "REST"}
+                        </span>
+                      </div>
+                      <div className="truncate text-[11px] text-[color:var(--text-dim)]">
+                        {preset.description}
+                      </div>
+                    </div>
+                    <ArrowUpRight
+                      size={13}
+                      className="shrink-0 text-[color:var(--text-faint)] transition-colors group-hover:text-[color:var(--text-dim)]"
+                    />
+                  </button>
+                );
+              })}
             </div>
           </div>
         ))}
 
-        {filtered.length === 0 && (
+        {totalMatches === 0 && (
           <p className="py-8 text-center text-xs text-[color:var(--text-faint)]">
             No matches for "{q}".
           </p>
@@ -955,6 +1014,8 @@ export default function AddServerDialog({
 
   const [integration, setIntegration] = useState(null);
 
+  const [pickedPresetId, setPickedPresetId] = useState(initialPresetId);
+
   const [isApproving, setIsApproving] = useState(false);
 
   const submittingRef = useRef(false);
@@ -981,6 +1042,22 @@ export default function AddServerDialog({
       );
     });
   }, [initialIntegrationId, initialPresetId, integrations]);
+
+  const handlePickIntegration = (nextIntegration) => {
+    setIntegration(nextIntegration);
+
+    setPickedPresetId(null);
+  };
+
+  const handlePickPreset = (presetId) => {
+    const bridgeIntegration = integrations.find(
+      (item) => item.custom === "bridge",
+    );
+
+    setIntegration(bridgeIntegration || integrations[0] || null);
+
+    setPickedPresetId(presetId);
+  };
 
   const handleFormSubmit = async (payload) => {
     if (submittingRef.current) return;
@@ -1038,17 +1115,22 @@ export default function AddServerDialog({
       onClick={onClose}
     >
       <div
-        className="connector-dialog animate-scale-in panel-solid flex h-[min(640px,calc(100vh-48px))] max-h-[calc(100vh-48px)] w-full max-w-3xl overflow-hidden"
+        className="connector-dialog animate-scale-in panel-solid flex h-[min(760px,calc(100vh-48px))] max-h-[calc(100vh-48px)] w-full max-w-7xl overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="connector-sidebar flex h-full min-h-0 w-[300px] shrink-0 flex-col border-r border-[color:var(--border)] bg-[color:var(--surface-sunken)]/60 p-4">
+        <div className="connector-sidebar flex h-full min-h-0 w-[340px] shrink-0 flex-col border-r border-[color:var(--border)] bg-[color:var(--surface-sunken)]/60 p-4">
           <div className="mb-2 flex shrink-0 items-center justify-between px-1">
             <h3 className="font-display text-[13px] font-semibold text-[color:var(--text)]">
               Connect a component
             </h3>
           </div>
           <div className="min-h-0 flex-1">
-            <PickerList onPick={setIntegration} selectedId={integration?.id} />
+            <PickerList
+              onPick={handlePickIntegration}
+              onPickPreset={handlePickPreset}
+              selectedId={integration?.id}
+              selectedPresetId={pickedPresetId}
+            />
           </div>
         </div>
 
@@ -1081,7 +1163,7 @@ export default function AddServerDialog({
               <OAuthIntegrationForm
                 key={integration.id}
                 integration={integration}
-                onBack={() => setIntegration(integrations[0] || null)}
+                onBack={() => handlePickIntegration(integrations[0] || null)}
                 onSubmit={handleFormSubmit}
                 isSubmitting={busy}
               />
@@ -1091,26 +1173,26 @@ export default function AddServerDialog({
                 key={integration.id}
                 integration={integration}
                 existingServers={existingServers}
-                onBack={() => setIntegration(integrations[0] || null)}
+                onBack={() => handlePickIntegration(integrations[0] || null)}
                 onSubmit={handleFormSubmit}
                 isSubmitting={busy}
               />
             )}
             {integration?.custom === "bridge" && (
               <BridgePresetForm
-                key={integration.id}
-                onBack={() => setIntegration(integrations[0] || null)}
+                key={`${integration.id}:${pickedPresetId || ""}`}
+                onBack={() => handlePickIntegration(integrations[0] || null)}
                 onSubmit={handleFormSubmit}
                 isSubmitting={busy}
                 existingServers={existingServers}
-                initialPresetId={initialPresetId}
+                initialPresetId={pickedPresetId}
               />
             )}
             {integration?.custom && integration.custom !== "bridge" && (
               <CustomForm
                 key={integration.id}
                 integration={integration}
-                onBack={() => setIntegration(integrations[0] || null)}
+                onBack={() => handlePickIntegration(integrations[0] || null)}
                 onSubmit={handleFormSubmit}
                 isSubmitting={busy}
               />

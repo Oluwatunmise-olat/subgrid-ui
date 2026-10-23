@@ -686,7 +686,7 @@ function RunGraph({
   cancelWorkflow,
   onInspectResult,
 }) {
-  const NODE_W = 340;
+  const NODE_W = 420;
 
   const GAP = 64;
 
@@ -794,7 +794,13 @@ function RunGraph({
 
         const b = next[key];
 
-        if (!a || !b || a.cx !== b.cx || a.top !== b.top || a.bottom !== b.bottom)
+        if (
+          !a ||
+          !b ||
+          a.cx !== b.cx ||
+          a.top !== b.top ||
+          a.bottom !== b.bottom
+        )
           return next;
       }
 
@@ -1002,7 +1008,7 @@ function ResultNode({ step, onOpen }) {
 
   return (
     <div
-      className={`w-[340px] overflow-hidden rounded-2xl border bg-[color:var(--surface-raised)] ${failed ? "border-rose-400/40" : "border-[color:var(--border)]"}`}
+      className={`w-[420px] overflow-hidden rounded-2xl border bg-[color:var(--surface-raised)] ${failed ? "border-rose-400/40" : "border-[color:var(--border)]"}`}
     >
       <div className="flex items-center gap-3 px-5 pb-4 pt-5">
         <span
@@ -1097,7 +1103,7 @@ function StepNode({
 
   return (
     <div
-      className={`w-[340px] overflow-hidden rounded-2xl border bg-[color:var(--surface-raised)] transition-colors ${active ? "border-[color:var(--brand-line)]" : awaitingConfirm ? "border-amber-400/40" : "border-[color:var(--border)]"}`}
+      className={`w-[420px] overflow-hidden rounded-2xl border bg-[color:var(--surface-raised)] transition-colors ${active ? "border-[color:var(--brand-line)]" : awaitingConfirm ? "border-amber-400/40" : "border-[color:var(--border)]"}`}
     >
       <div className="px-5 pb-4 pt-5">
         <div className="flex items-center gap-3">
@@ -1113,8 +1119,13 @@ function StepNode({
             {step.capability?.readOnly ? "read" : "write"}
           </span>
         </div>
+        {step.title && step.title !== step.tool_name && (
+          <p className="mt-3 text-[13px] leading-relaxed text-[color:var(--text)]">
+            {step.title}
+          </p>
+        )}
         <div
-          className={`mt-4 flex items-center gap-2 text-[13px] ${state.cls}`}
+          className={`mt-3 flex items-center gap-2 text-[13px] ${state.cls}`}
         >
           {state.node}
           <span>{state.label}</span>
@@ -1197,13 +1208,21 @@ function StepNode({
               Don't allow
             </button>
           </div>
-          <button
-            type="button"
-            onClick={onAllowAlways}
-            className="mt-2 block text-left font-mono text-[10.5px] text-[color:var(--text-faint)] transition-colors hover:text-[color:var(--text-dim)]"
-          >
-            Always allow — run it now and stop asking for {step.tool_name}
-          </button>
+          {step.capability?.operation === "execute" ? (
+            <p className="mt-2 max-w-[340px] text-[10.5px] leading-relaxed text-[color:var(--text-faint)]">
+              {step.tool_name} is a general-purpose code tool — it can call
+              anything on this component, not just this one action, so each call
+              needs its own review.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={onAllowAlways}
+              className="mt-2 block text-left font-mono text-[10.5px] text-[color:var(--text-faint)] transition-colors hover:text-[color:var(--text-dim)]"
+            >
+              Always allow — run it now and stop asking for {step.tool_name}
+            </button>
+          )}
         </div>
       )}
 
@@ -1238,6 +1257,68 @@ function formatCell(value) {
   if (typeof value === "boolean") return value ? "true" : "false";
 
   return String(value);
+}
+
+// Some tools return tabular results as "col1|col2\nval1|val2\n..."
+function parsePipeTable(value) {
+  if (typeof value !== "string" || !value.includes("|")) return null;
+
+  const lines = value.split("\n").filter((line) => line.length);
+
+  if (lines.length < 2) return null;
+
+  const cols = lines[0].split("|").map((c) => c.trim());
+
+  if (cols.length < 2) return null;
+
+  const rows = lines
+    .slice(1)
+    .map((line) => line.split("|").map((c) => c.trim()));
+
+  const sameWidth =
+    rows.find((row) => row.length !== cols.length) === undefined;
+
+  if (!sameWidth) return null;
+
+  return { cols, rows };
+}
+
+function PipeTable({ cols, rows }) {
+  return (
+    <div className="overflow-hidden rounded-xl border border-[color:var(--border)]">
+      <table className="w-full text-left">
+        <thead>
+          <tr className="border-b border-[color:var(--border)] bg-[color:var(--surface-sunken)]">
+            {cols.map((c, i) => (
+              <th
+                key={i}
+                className="px-3.5 py-2 font-mono text-[10px] font-medium uppercase tracking-wider text-[color:var(--text-faint)]"
+              >
+                {c}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, i) => (
+            <tr
+              key={i}
+              className={i ? "border-t border-[color:var(--border)]" : ""}
+            >
+              {row.map((cell, j) => (
+                <td
+                  key={j}
+                  className="px-3.5 py-2.5 font-mono text-[11.5px] text-[color:var(--text)]"
+                >
+                  {cell}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function ToolOutput({ raw, failed }) {
@@ -1301,21 +1382,41 @@ function ToolOutput({ raw, failed }) {
   }
 
   if (obj && Object.keys(obj).length) {
+    const seenValues = new Set();
+
+    const entries = Object.entries(obj).filter(([, v]) => {
+      const fingerprint = typeof v === "string" ? v : JSON.stringify(v);
+
+      if (seenValues.has(fingerprint)) return false;
+
+      seenValues.add(fingerprint);
+
+      return true;
+    });
+
     return (
       <div className="overflow-hidden rounded-xl border border-[color:var(--border)]">
-        {Object.entries(obj).map(([k, v], i) => (
-          <div
-            key={k}
-            className={`flex items-start gap-4 px-3.5 py-2.5 ${i ? "border-t border-[color:var(--border)]" : ""}`}
-          >
-            <span className="w-36 shrink-0 font-mono text-[11px] text-[color:var(--text-faint)]">
-              {k}
-            </span>
-            <span className="min-w-0 flex-1 break-words font-mono text-[11.5px] text-[color:var(--text)]">
-              {formatCell(v)}
-            </span>
-          </div>
-        ))}
+        {entries.map(([k, v], i) => {
+          const table = parsePipeTable(v);
+
+          return (
+            <div
+              key={k}
+              className={`flex items-start gap-4 px-3.5 py-2.5 ${i ? "border-t border-[color:var(--border)]" : ""}`}
+            >
+              <span className="w-36 shrink-0 font-mono text-[11px] text-[color:var(--text-faint)]">
+                {k}
+              </span>
+              <span className="min-w-0 flex-1 break-words font-mono text-[11.5px] whitespace-pre-wrap text-[color:var(--text)]">
+                {table ? (
+                  <PipeTable cols={table.cols} rows={table.rows} />
+                ) : (
+                  formatCell(v)
+                )}
+              </span>
+            </div>
+          );
+        })}
       </div>
     );
   }
@@ -1592,9 +1693,12 @@ function StepField({ name, schema, value, onChange, disabled, required }) {
     );
   }
 
-  const long = /body|message|content|text|html|description/i.test(
-    `${name} ${schema?.description || ""}`,
-  );
+  const fieldText = `${name} ${schema?.description || ""}`;
+
+  const isCode = /code|script|query|expression/i.test(fieldText);
+
+  const long =
+    isCode || /body|message|content|text|html|description/i.test(fieldText);
 
   const Tag = long ? "textarea" : "input";
 
@@ -1603,7 +1707,7 @@ function StepField({ name, schema, value, onChange, disabled, required }) {
       {label}
       <Tag
         value={value}
-        rows={long ? 2 : undefined}
+        rows={isCode ? 12 : long ? 2 : undefined}
         type={
           !long && (schema?.type === "number" || schema?.type === "integer")
             ? "number"
@@ -1612,7 +1716,8 @@ function StepField({ name, schema, value, onChange, disabled, required }) {
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled}
         placeholder={schema?.description || name}
-        className={fieldCls}
+        className={`${fieldCls} ${isCode ? "resize-y bg-[color:var(--surface-sunken)] leading-relaxed" : ""}`}
+        spellCheck={isCode ? false : undefined}
       />
     </label>
   );
